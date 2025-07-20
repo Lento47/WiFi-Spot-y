@@ -1,0 +1,12 @@
+specVersion: "v1"
+serviceId: "wifi-users---token-service"
+location: "us-central1"
+schema:
+  source: "./schema"
+  datasource:
+    postgresql:
+      database: "wifi-users---token-database"
+      cloudSql:
+        instanceId: "wifi-users---token-instance"
+      # schemaValidation: "COMPATIBLE"
+connectorDirs: ["./connector"]

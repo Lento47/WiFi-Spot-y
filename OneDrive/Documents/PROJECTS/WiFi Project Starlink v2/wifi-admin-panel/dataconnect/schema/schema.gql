@@ -1,0 +1,34 @@
+type ServicePlan @table {
+  name: String!
+  price: Float!
+  duration: Int!
+}
+
+type ServiceSubmission @table {
+  phone: String!
+  plan: ServicePlan!
+  amount: Float!
+  status: String!
+  token: String!
+  createdAt: Timestamp!
+}
+
+type ServiceToken @table {
+  token: String!
+  submissionId: ServiceSubmission!
+  expiresAt: Timestamp!
+  isUsed: Boolean!
+}
+
+type AppConfig @table {
+  currency: String!
+  defaultPlan: ServicePlan!
+  tokenLength: Int!
+}
+
+type AdminUser @table {
+  displayName: String!
+  email: String!
+  createdAt: Timestamp!
+  lastLoginAt: Timestamp
+}
