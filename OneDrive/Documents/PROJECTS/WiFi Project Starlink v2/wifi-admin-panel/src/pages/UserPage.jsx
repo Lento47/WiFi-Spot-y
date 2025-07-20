@@ -13,10 +13,10 @@ const UserPage = ({ user }) => {
     const [userData, setUserData] = useState({ creditsMinutes: 0 });
     const [timePackages, setTimePackages] = useState([]);
     const [userTokens, setUserTokens] = useState([]);
-    const [minutesToUse, setMinutesToUse] = useState('');
+    const [timeToUse, setTimeToUse] = useState({ days: '', hours: '', minutes: '' });
     const [generatedToken, setGeneratedToken] = useState(null);
 
-    // Fetch available time packages from the database
+    // Fetch available time packages
     useEffect(() => {
         const unsub = onSnapshot(collection(db, 'timePackages'), snapshot => {
             setTimePackages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -24,7 +24,7 @@ const UserPage = ({ user }) => {
         return () => unsub();
     }, []);
     
-    // Listen for real-time updates to the user's data (credits)
+    // Listen for user data (credits)
     useEffect(() => {
         const userRef = doc(db, "users", user.uid);
         const unsub = onSnapshot(userRef, (doc) => {
@@ -42,22 +42,40 @@ const UserPage = ({ user }) => {
         return () => unsub();
     }, [user.uid]);
 
+    // Updated formatCredits function
+    const formatCredits = (totalMinutes) => {
+        if (!totalMinutes || totalMinutes <= 0) return "0 minutos";
 
-    const formatCredits = (minutes) => {
-        if (!minutes || minutes < 0) return "0h 0m";
-        const hours = Math.floor(minutes / 60);
-        const remainingMinutes = Math.round(minutes % 60);
-        return `${hours}h ${remainingMinutes}m`;
+        const minutesInDay = 24 * 60;
+        const minutesInHour = 60;
+
+        const days = Math.floor(totalMinutes / minutesInDay);
+        const remainingMinutesAfterDays = totalMinutes % minutesInDay;
+        const hours = Math.floor(remainingMinutesAfterDays / minutesInHour);
+        const minutes = Math.round(remainingMinutesAfterDays % minutesInHour);
+
+        let parts = [];
+        if (days > 0) parts.push(`${days} día${days > 1 ? 's' : ''}`);
+        if (hours > 0) parts.push(`${hours} hora${hours > 1 ? 's' : ''}`);
+        if (minutes > 0) parts.push(`${minutes} minuto${minutes > 1 ? 's' : ''}`);
+        
+        if (parts.length === 0) return "0 minutos";
+        return parts.join(', ');
     };
 
     const handleGenerateToken = async (e) => {
         e.preventDefault();
-        const minutes = parseInt(minutesToUse, 10);
-        if (isNaN(minutes) || minutes <= 0) {
-            alert("Por favor, ingrese un número válido de minutos.");
+        const days = parseInt(timeToUse.days || 0, 10);
+        const hours = parseInt(timeToUse.hours || 0, 10);
+        const minutes = parseInt(timeToUse.minutes || 0, 10);
+
+        const totalMinutesToUse = (days * 24 * 60) + (hours * 60) + minutes;
+
+        if (isNaN(totalMinutesToUse) || totalMinutesToUse <= 0) {
+            alert("Por favor, ingrese una cantidad de tiempo válida.");
             return;
         }
-        if (minutes > userData.creditsMinutes) {
+        if (totalMinutesToUse > userData.creditsMinutes) {
             alert("No tiene suficientes créditos para generar este token.");
             return;
         }
@@ -66,23 +84,21 @@ const UserPage = ({ user }) => {
         try {
             const tokenString = `WIFI-${Date.now().toString().slice(-4)}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
             
-            // Create the token document with an 'active' status
             await addDoc(collection(db, 'tokens'), {
                 userId: user.uid,
                 tokenString,
-                durationMinutes: minutes,
-                status: 'active', // Can be 'active' or 'used'
+                durationMinutes: totalMinutesToUse,
+                status: 'active',
                 createdAt: serverTimestamp()
             });
 
-            // Deduct credits from the user
             const userRef = doc(db, 'users', user.uid);
             await updateDoc(userRef, {
-                creditsMinutes: increment(-minutes)
+                creditsMinutes: increment(-totalMinutesToUse)
             });
 
             setGeneratedToken(tokenString);
-            setMinutesToUse('');
+            setTimeToUse({ days: '', hours: '', minutes: '' });
 
         } catch (error) {
             console.error("Error generating token:", error);
@@ -150,40 +166,52 @@ const UserPage = ({ user }) => {
         )
     );
 
-    const GenerateTokenView = () => (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl w-full">
-            <div className="bg-white p-8 rounded-2xl shadow-xl">
-                <h2 className="text-3xl font-bold text-slate-800 mb-2">Generar Token</h2>
-                <p className="mb-8 text-slate-500">Use sus créditos para crear un token de acceso.</p>
-                <form onSubmit={handleGenerateToken}>
-                    <div className="mb-4">
-                        <label className="block text-sm font-bold text-slate-700 mb-1">Minutos a usar</label>
-                        <input type="number" value={minutesToUse} onChange={e => setMinutesToUse(e.target.value)} placeholder={`Máximo: ${Math.floor(userData.creditsMinutes)}`} required className="w-full px-3 py-3 bg-white border-slate-300 rounded-lg" />
-                    </div>
-                    <button type="submit" disabled={isLoading} className="w-full flex justify-center items-center bg-green-500 text-white font-bold py-4 rounded-lg">{isLoading ? <Spinner /> : 'Generar Token'}</button>
-                </form>
-                {generatedToken && (
-                    <div className="mt-8 p-4 bg-green-100 rounded-lg text-center">
-                        <p className="text-sm text-green-800">Su nuevo token es:</p>
-                        <p className="text-2xl font-mono font-bold text-green-900 break-all">{generatedToken}</p>
-                    </div>
-                )}
+    const GenerateTokenView = () => {
+        const handleTimeInputChange = (e) => {
+            const { name, value } = e.target;
+            setTimeToUse(prev => ({ ...prev, [name]: value }));
+        };
+
+        return (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl w-full">
+                <div className="bg-white p-8 rounded-2xl shadow-xl">
+                    <h2 className="text-3xl font-bold text-slate-800 mb-2">Generar Token</h2>
+                    <p className="mb-8 text-slate-500">Use sus créditos para crear un token de acceso.</p>
+                    <form onSubmit={handleGenerateToken}>
+                        <div className="mb-4">
+                            <label className="block text-sm font-bold text-slate-700 mb-1">Tiempo a usar</label>
+                            <div className="grid grid-cols-3 gap-2">
+                                <input type="number" name="days" value={timeToUse.days} onChange={handleTimeInputChange} placeholder="Días" className="w-full px-3 py-3 bg-white border-slate-300 rounded-lg" />
+                                <input type="number" name="hours" value={timeToUse.hours} onChange={handleTimeInputChange} placeholder="Horas" className="w-full px-3 py-3 bg-white border-slate-300 rounded-lg" />
+                                <input type="number" name="minutes" value={timeToUse.minutes} onChange={handleTimeInputChange} placeholder="Minutos" className="w-full px-3 py-3 bg-white border-slate-300 rounded-lg" />
+                            </div>
+                            <p className="text-xs text-slate-500 mt-1">Crédito disponible: {formatCredits(userData.creditsMinutes)}</p>
+                        </div>
+                        <button type="submit" disabled={isLoading} className="w-full flex justify-center items-center bg-green-500 text-white font-bold py-4 rounded-lg">{isLoading ? <Spinner /> : 'Generar Token'}</button>
+                    </form>
+                    {generatedToken && (
+                        <div className="mt-8 p-4 bg-green-100 rounded-lg text-center">
+                            <p className="text-sm text-green-800">Su nuevo token es:</p>
+                            <p className="text-2xl font-mono font-bold text-green-900 break-all">{generatedToken}</p>
+                        </div>
+                    )}
+                </div>
+                <div className="bg-white p-8 rounded-2xl shadow-xl">
+                    <h3 className="text-2xl font-bold text-slate-800 mb-4">Mis Tokens Activos</h3>
+                    {userTokens.length > 0 ? (
+                        <ul className="space-y-3 max-h-96 overflow-y-auto">
+                            {userTokens.map(token => (
+                                <li key={token.id} className="p-3 bg-slate-50 rounded-lg">
+                                    <p className="font-mono font-bold text-slate-700">{token.tokenString}</p>
+                                    <p className="text-sm text-slate-500">{formatCredits(token.durationMinutes)}</p>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : <p className="text-slate-500">No tiene tokens generados.</p>}
+                </div>
             </div>
-            <div className="bg-white p-8 rounded-2xl shadow-xl">
-                <h3 className="text-2xl font-bold text-slate-800 mb-4">Mis Tokens Activos</h3>
-                {userTokens.length > 0 ? (
-                    <ul className="space-y-3 max-h-96 overflow-y-auto">
-                        {userTokens.map(token => (
-                            <li key={token.id} className="p-3 bg-slate-50 rounded-lg">
-                                <p className="font-mono font-bold text-slate-700">{token.tokenString}</p>
-                                <p className="text-sm text-slate-500">{token.durationMinutes} minutos</p>
-                            </li>
-                        ))}
-                    </ul>
-                ) : <p className="text-slate-500">No tiene tokens generados.</p>}
-            </div>
-        </div>
-    );
+        );
+    };
 
     return (
         <div className="bg-slate-100 min-h-screen p-4">
