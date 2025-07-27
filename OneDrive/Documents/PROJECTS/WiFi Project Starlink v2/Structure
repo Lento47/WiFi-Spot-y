@@ -1,0 +1,13 @@
+sinpe-wifi-portal/
+├── app.py               # Main Flask application
+├── config.py            # Constants (e.g., your SINPE details, plans)
+├── database.py          # DB setup and queries
+├── ocr_parser.py        # OCR extraction and validation logic
+├── templates/           # HTML templates
+│   ├── base.html        # Base layout
+│   ├── upload.html      # Upload form
+│   └── success.html     # Token display or error
+├── static/              # CSS/JS if needed (e.g., bootstrap.css)
+├── uploads/             # Temporary image storage (gitignore this)
+├── requirements.txt     # Pip dependencies
+└── README.md            # Instructions for setup/run
