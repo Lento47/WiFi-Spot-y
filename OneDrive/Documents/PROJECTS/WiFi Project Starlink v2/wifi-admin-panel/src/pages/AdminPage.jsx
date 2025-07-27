@@ -5,8 +5,10 @@ import Dashboard from '../components/admin/Dashboard.jsx';
 import PendingPayments from '../components/admin/PendingPayments.jsx';
 import UserManagement from '../components/admin/UserManagement.jsx';
 import Settings from '../components/admin/Settings.jsx';
+import CensoredWords from '../components/admin/CensoredWords.jsx';
+import BulletinBoard from '../components/user/BulletinBoard.jsx'; // Import the bulletin board
 import Icon from '../components/common/Icon.jsx';
-import { useTheme } from '../App.jsx'; // Import the useTheme hook
+import { useTheme } from '../App.jsx';
 
 const ThemeToggleButton = () => {
     const { theme, toggleTheme } = useTheme();
@@ -28,6 +30,8 @@ const AdminPage = ({ user }) => {
         { id: 'dashboard', label: 'Dashboard', component: <Dashboard db={db} />, icon: <Icon path="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" /> },
         { id: 'payments', label: 'Pagos Pendientes', component: <PendingPayments db={db} />, icon: <Icon path="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h6m3-3.75l-3 3m3 0l-3-3m-3.75 6.75h16.5c.621 0 1.125-.504 1.125-1.125V6.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v10.5c0 .621.504 1.125 1.125 1.125z" /> },
         { id: 'users', label: 'Usuarios', component: <UserManagement db={db} />, icon: <Icon path="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-4.663M15 12.5a5 5 0 11-10 0 5 5 0 0110 0z" /> },
+        { id: 'bulletin', label: 'Ver Mural', component: <BulletinBoard user={user} isAdmin={true} />, icon: <Icon path="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /> },
+        { id: 'moderation', label: 'Moderar Palabras', component: <CensoredWords />, icon: <Icon path="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /> },
         { id: 'settings', label: 'Configuración', component: <Settings db={db} />, icon: <Icon path="M9.594 3.94c.09-.542.56-1.007 1.11-1.11h2.593c.55 0 1.02.465 1.11 1.11l.09 1.423a7.5 7.5 0 015.418 5.418l1.423.09c.542.09 1.007.56 1.11 1.11v2.593c0 .55-.465 1.02-1.11 1.11l-1.423.09a7.5 7.5 0 01-5.418 5.418l-.09 1.423c-.09.542-.56 1.007-1.11 1.11h-2.593c-.55 0-1.02-.465-1.11-1.11l-.09-1.423a7.5 7.5 0 01-5.418-5.418l-1.423-.09c-.542-.09-1.007-.56-1.11-1.11v-2.593c0 .55.465-1.02 1.11 1.11l1.423-.09a7.5 7.5 0 015.418-5.418l.09-1.423z M12 15.75a3.75 3.75 0 100-7.5 3.75 3.75 0 000 7.5z" /> },
     ];
 
@@ -55,10 +59,6 @@ const AdminPage = ({ user }) => {
                         <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200 mb-6 px-2">Menú</h2>
                         <div className="space-y-3">
                             {tabs.map(tab => <TabButton key={tab.id} tab={tab} isActive={activeTab === tab.id} />)}
-                            <button onClick={handleLogout} className="flex items-center w-full space-x-3 px-4 py-3 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 mt-6">
-                                <Icon path="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
-                                <span>Cerrar Sesión</span>
-                            </button>
                         </div>
                     </aside>
                     <main className="flex-1">

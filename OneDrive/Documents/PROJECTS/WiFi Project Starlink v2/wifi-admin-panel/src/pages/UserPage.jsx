@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { signOut } from 'firebase/auth';
-import { collection, doc, onSnapshot, updateDoc, serverTimestamp, setDoc, addDoc, query, where, orderBy, increment } from 'firebase/firestore';
+import { collection, doc, onSnapshot, updateDoc, serverTimestamp, setDoc, addDoc, query, where, orderBy, increment, getDoc, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '../firebase';
 import Spinner from '../components/common/Spinner.jsx';
-import { useTheme } from '../App.jsx'; // Import the theme hook
-import Icon from '../components/common/Icon.jsx'; // Import the Icon component
+import Icon from '../components/common/Icon.jsx';
+import BulletinBoard from '../components/user/BulletinBoard.jsx';
+import { useTheme } from '../App.jsx';
 
 const ThemeToggleButton = () => {
     const { theme, toggleTheme } = useTheme();
@@ -16,16 +17,81 @@ const ThemeToggleButton = () => {
     );
 };
 
+const BuyCreditsView = ({ submission, setSubmission, timePackages, handleSubmitPurchase, isLoading }) => (
+    submission ? (
+         <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-xl text-center max-w-md w-full">
+            <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200 mb-4">{ {pending: "Solicitud Enviada", approved: "✅ ¡Aprobada!", rejected: "❌ Rechazada"}[submission.status] }</h2>
+            <button onClick={() => setSubmission(null)} className="mt-8 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold py-3 px-6 rounded-lg">Hacer otra solicitud</button>
+        </div>
+    ) : (
+         <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-xl max-w-md w-full">
+            <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200 mb-2">Comprar Créditos</h2>
+            <p className="mb-8 text-slate-500 dark:text-slate-400">Pague al SINPE <strong className="font-mono text-slate-700 dark:text-slate-300">8888-8888</strong>.</p>
+            <form onSubmit={handleSubmitPurchase}>
+                <div className="mb-4">
+                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Paquete</label>
+                    <select name="package" required className="w-full px-3 py-3 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 rounded-lg">{timePackages.map(p => <option key={p.id} value={p.id}>{p.name} - ₡{p.price}</option>)}</select>
+                </div>
+                <div className="mb-4">
+                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1"># Comprobante</label>
+                    <input name="sinpe-id" required className="w-full px-3 py-3 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 rounded-lg" />
+                </div>
+                <div className="mb-8">
+                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Recibo</label>
+                    <input type="file" name="receipt-file" required accept="image/*" className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:font-semibold file:bg-slate-50 dark:file:bg-slate-700 file:text-blue-700 dark:file:text-blue-300" />
+                </div>
+                <button type="submit" disabled={isLoading} className="w-full flex justify-center items-center bg-blue-600 text-white font-bold py-4 rounded-lg">{isLoading ? <Spinner /> : 'Enviar para Verificación'}</button>
+            </form>
+        </div>
+    )
+);
+
+const GenerateTokenView = ({ handleGenerateToken, minutesToUse, setMinutesToUse, userData, formatCredits, isLoading, generatedToken, userTokens }) => (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl w-full">
+        <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-xl">
+            <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200 mb-2">Generar Token</h2>
+            <p className="mb-8 text-slate-500 dark:text-slate-400">Use sus créditos para crear un token de acceso.</p>
+            <form onSubmit={handleGenerateToken}>
+                <div className="mb-4">
+                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Minutos a usar</label>
+                    <input type="number" value={minutesToUse} onChange={e => setMinutesToUse(e.target.value)} placeholder={`Máximo: ${Math.floor(userData.creditsMinutes)}`} required className="w-full px-3 py-3 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 rounded-lg" />
+                </div>
+                <button type="submit" disabled={isLoading} className="w-full flex justify-center items-center bg-green-500 text-white font-bold py-4 rounded-lg">{isLoading ? <Spinner /> : 'Generar Token'}</button>
+            </form>
+            {generatedToken && (
+                <div className="mt-8 p-4 bg-green-100 dark:bg-green-900/50 rounded-lg text-center">
+                    <p className="text-sm text-green-800 dark:text-green-300">Su nuevo token es:</p>
+                    <p className="text-2xl font-mono font-bold text-green-900 dark:text-green-200 break-all">{generatedToken}</p>
+                </div>
+            )}
+        </div>
+        <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-xl">
+            <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-200 mb-4">Mis Tokens Activos</h3>
+            {userTokens.length > 0 ? (
+                <ul className="space-y-3 max-h-96 overflow-y-auto">
+                    {userTokens.map(token => (
+                        <li key={token.id} className="p-3 bg-slate-50 dark:bg-slate-700 rounded-lg">
+                            <p className="font-mono font-bold text-slate-700 dark:text-slate-200">{token.tokenString}</p>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">{token.durationMinutes} minutos</p>
+                        </li>
+                    ))}
+                </ul>
+            ) : <p className="text-slate-500 dark:text-slate-400">No tiene tokens generados.</p>}
+        </div>
+    </div>
+);
+
 const UserPage = ({ user }) => {
-    // ... (all existing state and functions remain the same)
     const [activeTab, setActiveTab] = useState('buy');
     const [submission, setSubmission] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
-    const [userData, setUserData] = useState({ creditsMinutes: 0 });
+    const [userData, setUserData] = useState(null); // Changed initial state
     const [timePackages, setTimePackages] = useState([]);
     const [userTokens, setUserTokens] = useState([]);
     const [minutesToUse, setMinutesToUse] = useState('');
     const [generatedToken, setGeneratedToken] = useState(null);
+    const [username, setUsername] = useState('');
+    const [usernameError, setUsernameError] = useState('');
 
     useEffect(() => {
         const unsub = onSnapshot(collection(db, 'timePackages'), snapshot => {
@@ -37,7 +103,7 @@ const UserPage = ({ user }) => {
     useEffect(() => {
         const userRef = doc(db, "users", user.uid);
         const unsub = onSnapshot(userRef, (doc) => {
-            setUserData(doc.data() || { creditsMinutes: 0 });
+            setUserData(doc.data() || { needsUsername: !doc.exists(), creditsMinutes: 0 });
         });
         return () => unsub();
     }, [user.uid]);
@@ -56,7 +122,41 @@ const UserPage = ({ user }) => {
         const remainingMinutes = Math.round(minutes % 60);
         return `${hours}h ${remainingMinutes}m`;
     };
+    
+    const handleUsernameSubmit = async (e) => {
+        e.preventDefault();
+        setIsLoading(true);
+        setUsernameError('');
+        if (username.length < 3) {
+            setUsernameError("El nombre de usuario debe tener al menos 3 caracteres.");
+            setIsLoading(false);
+            return;
+        }
 
+        try {
+            const usersRef = collection(db, 'users');
+            const q = query(usersRef, where("username", "==", username));
+            const querySnapshot = await getDocs(q);
+            if (!querySnapshot.empty) {
+                setUsernameError("Este nombre de usuario ya está en uso.");
+                setIsLoading(false);
+                return;
+            }
+
+            await setDoc(doc(db, 'users', user.uid), {
+                email: user.email,
+                username: username,
+                creditsMinutes: 0,
+                createdAt: serverTimestamp()
+            });
+        } catch (err) {
+            setUsernameError("No se pudo guardar el nombre de usuario.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // ... (handleGenerateToken and handleSubmitPurchase remain the same)
     const handleGenerateToken = async (e) => {
         e.preventDefault();
         const minutes = parseInt(minutesToUse, 10);
@@ -72,23 +172,10 @@ const UserPage = ({ user }) => {
         setIsLoading(true);
         try {
             const tokenString = `WIFI-${Date.now().toString().slice(-4)}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-            
-            await addDoc(collection(db, 'tokens'), {
-                userId: user.uid,
-                tokenString,
-                durationMinutes: minutes,
-                status: 'active',
-                createdAt: serverTimestamp()
-            });
-
-            const userRef = doc(db, 'users', user.uid);
-            await updateDoc(userRef, {
-                creditsMinutes: increment(-minutes)
-            });
-
+            await addDoc(collection(db, 'tokens'), { userId: user.uid, tokenString, durationMinutes: minutes, status: 'active', createdAt: serverTimestamp() });
+            await updateDoc(doc(db, 'users', user.uid), { creditsMinutes: increment(-minutes) });
             setGeneratedToken(tokenString);
             setMinutesToUse('');
-
         } catch (error) {
             console.error("Error generating token:", error);
             alert("Ocurrió un error al generar el token.");
@@ -126,76 +213,33 @@ const UserPage = ({ user }) => {
     
     const handleLogout = () => signOut(auth);
 
-    const BuyCreditsView = () => (
-        submission ? (
-             <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-xl text-center max-w-md w-full">
-                <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200 mb-4">{ {pending: "Solicitud Enviada", approved: "✅ ¡Aprobada!", rejected: "❌ Rechazada"}[submission.status] }</h2>
-                <button onClick={() => setSubmission(null)} className="mt-8 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold py-3 px-6 rounded-lg">Hacer otra solicitud</button>
+    if (!userData || userData.needsUsername) {
+        return (
+            <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+                <div className="max-w-md w-full bg-white p-8 rounded-2xl shadow-xl">
+                    <h2 className="text-3xl font-bold text-center text-slate-800 mb-2">¡Casi listo!</h2>
+                    <p className="text-center text-slate-500 mb-8">Elige tu nombre de usuario para el mural comunitario.</p>
+                    <form onSubmit={handleUsernameSubmit}>
+                        <div className="mb-4">
+                            <label className="block text-sm font-bold text-slate-700 mb-1">Nombre de Usuario</label>
+                            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} required className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg"/>
+                        </div>
+                        {usernameError && <p className="text-red-500 text-sm text-center mb-4">{usernameError}</p>}
+                        <button type="submit" disabled={isLoading} className="w-full flex justify-center items-center bg-blue-600 text-white font-bold py-3 px-4 rounded-lg">
+                            {isLoading ? <Spinner /> : 'Guardar y Continuar'}
+                        </button>
+                    </form>
+                </div>
             </div>
-        ) : (
-             <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-xl max-w-md w-full">
-                <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200 mb-2">Comprar Créditos</h2>
-                <p className="mb-8 text-slate-500 dark:text-slate-400">Pague al SINPE <strong className="font-mono text-slate-700 dark:text-slate-300">8888-8888</strong>.</p>
-                <form onSubmit={handleSubmitPurchase}>
-                    <div className="mb-4">
-                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Paquete</label>
-                        <select name="package" required className="w-full px-3 py-3 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 rounded-lg">{timePackages.map(p => <option key={p.id} value={p.id}>{p.name} - ₡{p.price}</option>)}</select>
-                    </div>
-                    <div className="mb-4">
-                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1"># Comprobante</label>
-                        <input name="sinpe-id" required className="w-full px-3 py-3 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 rounded-lg" />
-                    </div>
-                    <div className="mb-8">
-                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Recibo</label>
-                        <input type="file" name="receipt-file" required accept="image/*" className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:font-semibold file:bg-slate-50 dark:file:bg-slate-700 file:text-blue-700 dark:file:text-blue-300" />
-                    </div>
-                    <button type="submit" disabled={isLoading} className="w-full flex justify-center items-center bg-blue-600 text-white font-bold py-4 rounded-lg">{isLoading ? <Spinner /> : 'Enviar para Verificación'}</button>
-                </form>
-            </div>
-        )
-    );
-
-    const GenerateTokenView = () => (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl w-full">
-            <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-xl">
-                <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200 mb-2">Generar Token</h2>
-                <p className="mb-8 text-slate-500 dark:text-slate-400">Use sus créditos para crear un token de acceso.</p>
-                <form onSubmit={handleGenerateToken}>
-                    <div className="mb-4">
-                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Minutos a usar</label>
-                        <input type="number" value={minutesToUse} onChange={e => setMinutesToUse(e.target.value)} placeholder={`Máximo: ${Math.floor(userData.creditsMinutes)}`} required className="w-full px-3 py-3 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 rounded-lg" />
-                    </div>
-                    <button type="submit" disabled={isLoading} className="w-full flex justify-center items-center bg-green-500 text-white font-bold py-4 rounded-lg">{isLoading ? <Spinner /> : 'Generar Token'}</button>
-                </form>
-                {generatedToken && (
-                    <div className="mt-8 p-4 bg-green-100 dark:bg-green-900/50 rounded-lg text-center">
-                        <p className="text-sm text-green-800 dark:text-green-300">Su nuevo token es:</p>
-                        <p className="text-2xl font-mono font-bold text-green-900 dark:text-green-200 break-all">{generatedToken}</p>
-                    </div>
-                )}
-            </div>
-            <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-xl">
-                <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-200 mb-4">Mis Tokens Activos</h3>
-                {userTokens.length > 0 ? (
-                    <ul className="space-y-3 max-h-96 overflow-y-auto">
-                        {userTokens.map(token => (
-                            <li key={token.id} className="p-3 bg-slate-50 dark:bg-slate-700 rounded-lg">
-                                <p className="font-mono font-bold text-slate-700 dark:text-slate-200">{token.tokenString}</p>
-                                <p className="text-sm text-slate-500 dark:text-slate-400">{token.durationMinutes} minutos</p>
-                            </li>
-                        ))}
-                    </ul>
-                ) : <p className="text-slate-500 dark:text-slate-400">No tiene tokens generados.</p>}
-            </div>
-        </div>
-    );
+        );
+    }
 
     return (
         <div className="bg-slate-100 dark:bg-slate-900 min-h-screen p-4">
             <header className="max-w-7xl mx-auto flex justify-between items-center mb-10">
                 <div>
                     <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Portal de Usuario</h1>
-                    <p className="text-slate-500 dark:text-slate-400">{user.email}</p>
+                    <p className="text-slate-500 dark:text-slate-400">{userData.username || user.email}</p>
                 </div>
                 <div className="flex items-center space-x-6">
                     <div className="text-right">
@@ -210,10 +254,28 @@ const UserPage = ({ user }) => {
                 <div className="flex items-center space-x-2 p-1.5 bg-slate-200 dark:bg-slate-800 rounded-full">
                     <button onClick={() => setActiveTab('buy')} className={`px-4 py-2 text-sm font-semibold rounded-full ${activeTab === 'buy' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-slate-200 shadow' : 'text-slate-600 dark:text-slate-400'}`}>Comprar Créditos</button>
                     <button onClick={() => setActiveTab('tokens')} className={`px-4 py-2 text-sm font-semibold rounded-full ${activeTab === 'tokens' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-slate-200 shadow' : 'text-slate-600 dark:text-slate-400'}`}>Usar Créditos / Tokens</button>
+                    <button onClick={() => setActiveTab('bulletin')} className={`px-4 py-2 text-sm font-semibold rounded-full ${activeTab === 'bulletin' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-slate-200 shadow' : 'text-slate-600 dark:text-slate-400'}`}>Mural Comunitario</button>
                 </div>
             </nav>
             <main className="flex items-start justify-center">
-                {activeTab === 'buy' ? <BuyCreditsView /> : <GenerateTokenView />}
+                {activeTab === 'buy' && <BuyCreditsView 
+                    submission={submission}
+                    setSubmission={setSubmission}
+                    timePackages={timePackages}
+                    handleSubmitPurchase={handleSubmitPurchase}
+                    isLoading={isLoading}
+                />}
+                {activeTab === 'tokens' && <GenerateTokenView 
+                    handleGenerateToken={handleGenerateToken}
+                    minutesToUse={minutesToUse}
+                    setMinutesToUse={setMinutesToUse}
+                    userData={userData}
+                    formatCredits={formatCredits}
+                    isLoading={isLoading}
+                    generatedToken={generatedToken}
+                    userTokens={userTokens}
+                />}
+                {activeTab === 'bulletin' && <BulletinBoard user={user} />}
             </main>
         </div>
     );

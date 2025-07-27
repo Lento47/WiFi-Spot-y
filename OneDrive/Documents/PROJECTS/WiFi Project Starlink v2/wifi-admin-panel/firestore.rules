@@ -3,26 +3,54 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
   
-    // Logged-in users can create/update their own user document.
+    // Users can manage their own document
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
     
-    // Logged-in users can create their own payment records and read their own history.
+    // Payments can be created by users for themselves
     match /payments/{paymentId} {
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
       allow read: if request.auth != null && resource.data.userId == request.auth.uid;
     }
     
-    // Any logged-in user can read the list of available time packages.
+    // Time packages can be read by anyone, but only written by an admin
     match /timePackages/{packageId} {
       allow read: if request.auth != null;
       allow write: if request.auth != null && request.auth.token.email == 'lejzer36@gmail.com';
     }
     
-    // Logged-in users can create and read tokens that belong to them.
+    // Tokens can be created and read by their owner
     match /tokens/{tokenId} {
     	allow read, create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+    }
+
+    // Topics (Channels) can be read by any user, but only managed by an admin.
+    match /topics/{topicId} {
+      allow read: if request.auth != null;
+      allow create, delete, update: if request.auth != null && request.auth.token.email == 'lejzer36@gmail.com';
+    }
+
+    // Posts can be created if the user has write permission for that topic.
+    match /posts/{postId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && 
+                      ( (request.resource.data.topicId == 'general' && request.auth.token.email == 'lejzer36@gmail.com') ||
+                        (request.resource.data.topicId != 'general' && get(/databases/$(database)/documents/topics/$(request.resource.data.topicId)).data.canWrite == true) ||
+                        (request.resource.data.topicId != 'general' && request.auth.token.email == 'lejzer36@gmail.com')
+                      );
+      allow delete: if request.auth != null && request.auth.token.email == 'lejzer36@gmail.com';
+    }
+
+    // Censored words can only be managed by an admin.
+    match /censoredWords/{wordId} {
+        allow read, create, delete: if request.auth != null && request.auth.token.email == 'lejzer36@gmail.com';
+    }
+
+    // --- NEW RULE FOR PUNISHMENT CONFIG ---
+    // The app configuration can only be read and written by an admin.
+    match /config/{configId} {
+        allow read, write: if request.auth != null && request.auth.token.email == 'lejzer36@gmail.com';
     }
   }
 }
