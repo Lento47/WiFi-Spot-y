@@ -4,14 +4,7 @@ import { db } from '../../firebase';
 import Icon from '../common/Icon.jsx';
 
 const Dashboard = () => {
-    const [stats, setStats] = useState({
-        users: 0,
-        pending: 0,
-        approved: 0,
-        totalRevenue: 0,
-        activeTokens: 0,
-        usedTokens: 0,
-    });
+    const [stats, setStats] = useState({ users: 0, pending: 0, approved: 0, totalRevenue: 0, activeTokens: 0, usedTokens: 0 });
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -19,14 +12,9 @@ const Dashboard = () => {
         const paymentsQuery = query(collection(db, 'payments'));
         const tokensQuery = query(collection(db, 'tokens'));
 
-        const unsubUsers = onSnapshot(usersQuery, snapshot => {
-            setStats(prev => ({ ...prev, users: snapshot.size }));
-        });
-
+        const unsubUsers = onSnapshot(usersQuery, snapshot => setStats(prev => ({ ...prev, users: snapshot.size })));
         const unsubPayments = onSnapshot(paymentsQuery, snapshot => {
-            let pendingCount = 0;
-            let approvedCount = 0;
-            let revenue = 0;
+            let pendingCount = 0, approvedCount = 0, revenue = 0;
             snapshot.forEach(doc => {
                 const payment = doc.data();
                 if (payment.status === 'pending') pendingCount++;
@@ -37,10 +25,8 @@ const Dashboard = () => {
             });
             setStats(prev => ({ ...prev, pending: pendingCount, approved: approvedCount, totalRevenue: revenue }));
         });
-        
         const unsubTokens = onSnapshot(tokensQuery, snapshot => {
-            let activeCount = 0;
-            let usedCount = 0;
+            let activeCount = 0, usedCount = 0;
             snapshot.forEach(doc => {
                 const token = doc.data();
                 if (token.status === 'active') activeCount++;
@@ -48,24 +34,17 @@ const Dashboard = () => {
             });
             setStats(prev => ({ ...prev, activeTokens: activeCount, usedTokens: usedCount }));
         });
-        
         setLoading(false);
-
-        // Cleanup listeners on component unmount
-        return () => {
-            unsubUsers();
-            unsubPayments();
-            unsubTokens();
-        };
+        return () => { unsubUsers(); unsubPayments(); unsubTokens(); };
     }, []);
 
     const StatCard = ({ title, value, icon, color, isCurrency = false }) => (
-        <div className="bg-white p-6 rounded-2xl shadow-lg flex items-center space-x-5">
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-lg flex items-center space-x-5">
             <div className={`p-4 rounded-full ${color.bg}`}>{React.cloneElement(icon, { className: `w-8 h-8 ${color.text}` })}</div>
             <div>
-                <p className="text-base text-slate-500 font-medium">{title}</p>
-                {loading ? <div className="h-9 w-24 mt-1 bg-slate-200 rounded-md animate-pulse"></div> : 
-                    <p className="text-4xl font-bold text-slate-800">
+                <p className="text-base text-slate-500 dark:text-slate-400 font-medium">{title}</p>
+                {loading ? <div className="h-9 w-24 mt-1 bg-slate-200 dark:bg-slate-700 rounded-md animate-pulse"></div> : 
+                    <p className="text-4xl font-bold text-slate-800 dark:text-slate-200">
                         {isCurrency ? `₡${value.toLocaleString('es-CR')}` : value}
                     </p>
                 }
@@ -75,7 +54,7 @@ const Dashboard = () => {
 
     return (
         <div>
-            <h3 className="text-3xl font-bold text-slate-800 mb-6">Resumen General</h3>
+            <h3 className="text-3xl font-bold text-slate-800 dark:text-slate-200 mb-6">Resumen General</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 <StatCard title="Ingresos Totales" value={stats.totalRevenue} icon={<Icon path="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V6.75m0 0A.75.75 0 012.25 6h.75M3.75 15h16.5m-16.5 0a9 9 0 013.75 2.101" />} color={{bg: 'bg-emerald-100', text: 'text-emerald-600'}} isCurrency={true} />
                 <StatCard title="Usuarios Totales" value={stats.users} icon={<Icon path="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-4.663M15 12.5a5 5 0 11-10 0 5 5 0 0110 0z" />} color={{bg: 'bg-blue-100', text: 'text-blue-600'}} />
