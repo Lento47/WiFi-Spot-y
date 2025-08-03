@@ -13,6 +13,8 @@
     "@tailwindcss/postcss": "^4.1.11",
     "chart.js": "^4.5.0",
     "firebase": "^10.12.2",
+    "install": "^0.13.0",
+    "npm": "^11.5.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
