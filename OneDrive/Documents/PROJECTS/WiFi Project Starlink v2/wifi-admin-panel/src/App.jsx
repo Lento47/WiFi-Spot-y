@@ -4,7 +4,6 @@ import AuthPage from './components/auth/AuthPage.jsx';
 import AdminPage from './pages/AdminPage.jsx';
 import UserPage from './pages/UserPage.jsx';
 import NetworkStatusPage from './pages/NetworkStatusPage.jsx';
-
 import Spinner from './components/common/Spinner.jsx';
 import { auth } from './firebase';
 import Icon from './components/common/Icon.jsx';
