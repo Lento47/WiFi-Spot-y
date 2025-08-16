@@ -3,15 +3,37 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
   
-    // Users can manage their own document
-    match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    // --- TOKEN RULES ---
+    // Users can read their own tokens
+    match /tokens/{tokenId} {
+        allow read: if request.auth != null && 
+            (resource.data.userId == request.auth.uid || 
+             request.auth.token.email == 'lejzer36@gmail.com');
+        // Admins can update tokens for management (extending time, etc.)
+        allow update: if request.auth != null && request.auth.token.email == 'lejzer36@gmail.com';
     }
-    
-    // Payments can be created by users for themselves
+
+    // --- USER RULES ---
+    // Users can read and update their own profile
+    match /users/{userId} {
+        allow create: if request.auth != null && request.resource.data.email == request.auth.token.email;
+        allow read: if request.auth != null && 
+            (resource.data.email == request.auth.token.email || 
+             request.auth.token.email == 'lejzer36@gmail.com');
+        allow update: if request.auth != null && 
+            (resource.data.email == request.auth.token.email || 
+             request.auth.token.email == 'lejzer36@gmail.com');
+    }
+
+    // --- PAYMENT RULES ---
+    // Users can create their own payments and read their own payment history
     match /payments/{paymentId} {
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+        allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+        allow read: if request.auth != null && 
+            (resource.data.userId == request.auth.uid || 
+             request.auth.token.email == 'lejzer36@gmail.com');
+        // Admins can update payments for approval/denial
+        allow update: if request.auth != null && request.auth.token.email == 'lejzer36@gmail.com';
     }
     
     // Time packages can be read by anyone, but only written by an admin
@@ -20,11 +42,6 @@ service cloud.firestore {
       allow write: if request.auth != null && request.auth.token.email == 'lejzer36@gmail.com';
     }
     
-    // Tokens can be created and read by their owner
-    match /tokens/{tokenId} {
-    	allow read, create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-    }
-
     // Topics (Channels) can be read by any user, but only managed by an admin.
     match /topics/{topicId} {
       allow read: if request.auth != null;
@@ -36,7 +53,7 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow create: if request.auth != null && 
                       ( (request.resource.data.topicId == 'general' && request.auth.token.email == 'lejzer36@gmail.com') ||
-                        (request.resource.data.topicId != 'general' && get(/databases/$(database)/documents/topics/$(request.resource.data.topicId)).data.canWrite == true) ||
+                        (request.resource.data.topicId != 'general' && request.resource.data.topicId != null && get(/databases/$(database)/documents/topics/$(request.resource.data.topicId)).data.canWrite == true) ||
                         (request.resource.data.topicId != 'general' && request.auth.token.email == 'lejzer36@gmail.com')
                       );
       allow delete: if request.auth != null && request.auth.token.email == 'lejzer36@gmail.com';
@@ -47,10 +64,125 @@ service cloud.firestore {
         allow read, create, delete: if request.auth != null && request.auth.token.email == 'lejzer36@gmail.com';
     }
 
-    // --- NEW RULE FOR PUNISHMENT CONFIG ---
     // The app configuration can only be read and written by an admin.
     match /config/{configId} {
         allow read, write: if request.auth != null && request.auth.token.email == 'lejzer36@gmail.com';
+    }
+
+    // Network status data - users can only see aggregated/public data, not individual user data
+    match /networkStatus/{statusId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        (request.auth.token.email == 'lejzer36@gmail.com' || 
+         request.auth.token.email == 'lejzer36@pm.me' || 
+         request.auth.token.email == 'lejzerv@gmail.com');
+    }
+
+    // Network status hourly/daily aggregates - public read, admin write
+    match /networkStatusHourly/{statusId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        (request.auth.token.email == 'lejzer36@gmail.com' || 
+         request.auth.token.email == 'lejzer36@pm.me' || 
+         request.auth.token.email == 'lejzerv@gmail.com');
+    }
+
+    match /networkStatusDaily/{statusId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        (request.auth.token.email == 'lejzer36@gmail.com' || 
+         request.auth.token.email == 'lejzer36@pm.me' || 
+         request.auth.token.email == 'lejzerv@gmail.com');
+    }
+
+    // System logs and settings - admin only
+    match /systemLogs/{logId} {
+      allow read, write: if request.auth != null && 
+        (request.auth.token.email == 'lejzer36@gmail.com' || 
+         request.auth.token.email == 'lejzer36@pm.me' || 
+         request.auth.token.email == 'lejzerv@gmail.com');
+    }
+
+    match /systemSettings/{settingId} {
+      allow read, write: if request.auth != null && 
+        (request.auth.token.email == 'lejzer36@gmail.com' || 
+         request.auth.token.email == 'lejzer36@pm.me' || 
+         request.auth.token.email == 'lejzerv@gmail.com');
+    }
+
+    // Support tickets - users can only see their own
+    match /supportTickets/{ticketId} {
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow read, update: if request.auth != null && 
+        (resource.data.userId == request.auth.uid || 
+         request.auth.token.email == 'lejzer36@gmail.com');
+      // Admins can read all tickets for management
+      allow read, update: if request.auth != null && request.auth.token.email == 'lejzer36@gmail.com';
+    }
+
+    // --- REFERRAL SYSTEM RULES ---
+    // Users can create and read their own referrals
+    match /referrals/{referralId} {
+      allow create: if request.auth != null && request.resource.data.referrerId == request.auth.uid;
+      allow read: if request.auth != null && 
+        (resource.data.referrerId == request.auth.uid || 
+         request.auth.token.email == 'lejzer36@gmail.com');
+      allow update: if request.auth != null && 
+        (resource.data.referrerId == request.auth.uid ||
+         request.auth.token.email == 'lejzer36@gmail.com');
+      // Admins can read all referrals for management
+      allow read: if request.auth != null && request.auth.token.email == 'lejzer36@gmail.com';
+    }
+
+    // Users can create and read their own referral shares
+    match /referralShares/{shareId} {
+      allow create: if request.auth != null && request.resource.data.referrerId == request.auth.uid;
+      allow read: if request.auth != null && 
+        (resource.data.referrerId == request.auth.uid || 
+         request.auth.token.email == 'lejzer36@gmail.com');
+      // Admins can read all referral shares for management
+      allow read: if request.auth != null && request.auth.token.email == 'lejzer36@gmail.com';
+    }
+
+    // --- ENHANCED NOTIFICATION RULES ---
+    // Users can read and update (mark as read) notifications that are for them.
+    // Admins can read all admin notifications.
+    // Users cannot create or delete notifications directly.
+    match /notifications/{notificationId} {
+        allow read, update: if request.auth != null && 
+            (resource.data.toUserId == request.auth.uid || 
+             (resource.data.isAdminNotification == true && request.auth.token.email == 'lejzer36@gmail.com'));
+        // Admins can read all notifications for management
+        allow read: if request.auth != null && request.auth.token.email == 'lejzer36@gmail.com';
+    }
+
+    // Allow authenticated users to list collections they need for basic functionality
+    // This prevents the "Property resource is undefined on object. for 'list'" error
+    match /{collection}/{document=**} {
+      allow list: if request.auth != null && 
+        (collection == 'timePackages') ||
+        (collection == 'topics') ||
+        (collection == 'posts') ||
+        (collection == 'networkStatus') ||
+        (collection == 'networkStatusHourly') ||
+        (collection == 'networkStatusDaily') ||
+        (collection == 'censoredWords') ||
+        (collection == 'config') ||
+        (collection == 'users') ||
+        (collection == 'referrals') ||
+        (collection == 'referralShares') ||
+        (collection == 'supportTickets') ||
+        (collection == 'notifications') ||
+        (collection == 'payments') ||
+        (collection == 'tokens');
+      
+      // Allow admins to list all collections
+      allow list: if request.auth != null && request.auth.token.email == 'lejzer36@gmail.com';
+    }
+
+    // Default rule: deny all other access
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

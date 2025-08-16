@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { signOut } from 'firebase/auth';
-import { collection, doc, onSnapshot, updateDoc, serverTimestamp, setDoc, addDoc, query, where, orderBy, increment, getDoc, getDocs } from 'firebase/firestore';
+import { collection, doc, onSnapshot, updateDoc, serverTimestamp, setDoc, addDoc, query, where, orderBy, increment, writeBatch, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '../firebase';
 import Spinner from '../components/common/Spinner.jsx';
 import Icon from '../components/common/Icon.jsx';
 import BulletinBoard from '../components/user/BulletinBoard.jsx';
+import EnhancedBulletinBoard from '../components/user/EnhancedBulletinBoard.jsx';
+import Support from '../components/user/Support.jsx';
+import ReferralProgram from '../components/user/ReferralProgram.jsx';
+import PaymentSuccessAnimation from '../components/common/PaymentSuccessAnimation.jsx';
 import { useTheme } from '../App.jsx';
 
 const ThemeToggleButton = () => {
@@ -30,11 +34,11 @@ const BuyCreditsView = ({ submission, setSubmission, timePackages, handleSubmitP
             <form onSubmit={handleSubmitPurchase}>
                 <div className="mb-4">
                     <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Paquete</label>
-                    <select name="package" required className="w-full px-3 py-3 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 rounded-lg">{timePackages.map(p => <option key={p.id} value={p.id}>{p.name} - ₡{p.price}</option>)}</select>
+                    <select name="package" required className="w-full px-3 py-3 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-200">{timePackages.map(p => <option key={p.id} value={p.id} className="text-slate-700 dark:text-slate-200">{p.name} - ₡{p.price}</option>)}</select>
                 </div>
                 <div className="mb-4">
                     <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1"># Comprobante</label>
-                    <input name="sinpe-id" required className="w-full px-3 py-3 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 rounded-lg" />
+                    <input name="sinpe-id" required className="w-full px-3 py-3 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-200" />
                 </div>
                 <div className="mb-8">
                     <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Recibo</label>
@@ -54,7 +58,7 @@ const GenerateTokenView = ({ handleGenerateToken, minutesToUse, setMinutesToUse,
             <form onSubmit={handleGenerateToken}>
                 <div className="mb-4">
                     <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Minutos a usar</label>
-                    <input type="number" value={minutesToUse} onChange={e => setMinutesToUse(e.target.value)} placeholder={`Máximo: ${Math.floor(userData.creditsMinutes)}`} required className="w-full px-3 py-3 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 rounded-lg" />
+                    <input type="number" value={minutesToUse} onChange={e => setMinutesToUse(e.target.value)} placeholder={`Máximo: ${Math.floor(userData.creditsMinutes)}`} required className="w-full px-3 py-3 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-200" />
                 </div>
                 <button type="submit" disabled={isLoading} className="w-full flex justify-center items-center bg-green-500 text-white font-bold py-4 rounded-lg">{isLoading ? <Spinner /> : 'Generar Token'}</button>
             </form>
@@ -81,6 +85,63 @@ const GenerateTokenView = ({ handleGenerateToken, minutesToUse, setMinutesToUse,
     </div>
 );
 
+
+
+// --- NEW: Notifications Component ---
+const NotificationsPanel = ({ user }) => {
+    const [notifications, setNotifications] = useState([]);
+    const [isOpen, setIsOpen] = useState(false);
+
+    useEffect(() => {
+        if (!user) return;
+        const q = query(collection(db, "notifications"), where("toUserId", "==", user.uid), orderBy("createdAt", "desc"));
+        const unsub = onSnapshot(q, snapshot => {
+            setNotifications(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        });
+        return () => unsub();
+    }, [user.uid]);
+
+    const handleOpen = async () => {
+        setIsOpen(!isOpen);
+        if (!isOpen) { // Mark as read when opening for the first time
+            const unreadNotifs = notifications.filter(n => !n.isRead);
+            if (unreadNotifs.length > 0) {
+                const batch = writeBatch(db);
+                unreadNotifs.forEach(notif => {
+                    batch.update(doc(db, "notifications", notif.id), { isRead: true });
+                });
+                await batch.commit();
+            }
+        }
+    };
+
+    const unreadCount = notifications.filter(n => !n.isRead).length;
+
+    return (
+        <div className="relative">
+            <button onClick={handleOpen} className="relative p-2 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                <Icon path="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+                {unreadCount > 0 && (
+                    <span className="absolute top-0 right-0 block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-slate-800"></span>
+                )}
+            </button>
+            {isOpen && (
+                <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-slate-800 rounded-lg shadow-xl border dark:border-slate-700 z-10">
+                    <div className="p-3 font-bold text-lg border-b dark:border-slate-700">Notificaciones</div>
+                    <ul className="max-h-96 overflow-y-auto">
+                        {notifications.length > 0 ? notifications.map(n => (
+                            <li key={n.id} className={`p-3 border-b dark:border-slate-700 ${!n.isRead ? 'bg-blue-50 dark:bg-blue-900/50' : ''}`}>
+                                <p className="text-sm">{n.message}</p>
+                                <p className="text-xs text-slate-400 mt-1">{n.createdAt.toDate().toLocaleString('es-CR')}</p>
+                            </li>
+                        )) : <li className="p-4 text-sm text-slate-500">No hay notificaciones.</li>}
+                    </ul>
+                </div>
+            )}
+        </div>
+    );
+};
+
 const UserPage = ({ user }) => {
     const [activeTab, setActiveTab] = useState('buy');
     const [submission, setSubmission] = useState(null);
@@ -92,6 +153,8 @@ const UserPage = ({ user }) => {
     const [generatedToken, setGeneratedToken] = useState(null);
     const [username, setUsername] = useState('');
     const [usernameError, setUsernameError] = useState('');
+    const [showPaymentSuccess, setShowPaymentSuccess] = useState(false);
+    const [paymentData, setPaymentData] = useState(null);
 
     useEffect(() => {
         const unsub = onSnapshot(collection(db, 'timePackages'), snapshot => {
@@ -203,6 +266,17 @@ const UserPage = ({ user }) => {
                 durationMinutes: selectedPackage.durationMinutes
             });
             setSubmission({ id: docRef.id, status: 'pending' });
+            
+            // Show payment success animation
+            setPaymentData({
+                amount: selectedPackage.price,
+                packageName: selectedPackage.name,
+                durationMinutes: selectedPackage.durationMinutes,
+                sinpeId: sinpeId,
+                timestamp: new Date(),
+                status: 'pending'
+            });
+            setShowPaymentSuccess(true);
         } catch (error) { 
             console.error("Error submitting payment:", error);
             alert("Ocurrió un error."); 
@@ -218,7 +292,7 @@ const UserPage = ({ user }) => {
             <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
                 <div className="max-w-md w-full bg-white p-8 rounded-2xl shadow-xl">
                     <h2 className="text-3xl font-bold text-center text-slate-800 mb-2">¡Casi listo!</h2>
-                    <p className="text-center text-slate-500 mb-8">Elige tu nombre de usuario para el mural comunitario.</p>
+                                            <p className="text-center text-slate-500 dark:text-slate-400 mb-8">Elige tu nombre de usuario para el mural comunitario.</p>
                     <form onSubmit={handleUsernameSubmit}>
                         <div className="mb-4">
                             <label className="block text-sm font-bold text-slate-700 mb-1">Nombre de Usuario</label>
@@ -255,6 +329,8 @@ const UserPage = ({ user }) => {
                     <button onClick={() => setActiveTab('buy')} className={`px-4 py-2 text-sm font-semibold rounded-full ${activeTab === 'buy' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-slate-200 shadow' : 'text-slate-600 dark:text-slate-400'}`}>Comprar Créditos</button>
                     <button onClick={() => setActiveTab('tokens')} className={`px-4 py-2 text-sm font-semibold rounded-full ${activeTab === 'tokens' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-slate-200 shadow' : 'text-slate-600 dark:text-slate-400'}`}>Usar Créditos / Tokens</button>
                     <button onClick={() => setActiveTab('bulletin')} className={`px-4 py-2 text-sm font-semibold rounded-full ${activeTab === 'bulletin' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-slate-200 shadow' : 'text-slate-600 dark:text-slate-400'}`}>Mural Comunitario</button>
+                    <button onClick={() => setActiveTab('support')} className={`px-4 py-2 text-sm font-semibold rounded-full ${activeTab === 'support' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-slate-200 shadow' : 'text-slate-600 dark:text-slate-400'}`}>Soporte</button>
+                    <button onClick={() => setActiveTab('referrals')} className={`px-4 py-2 text-sm font-semibold rounded-full ${activeTab === 'referrals' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-slate-200 shadow' : 'text-slate-600 dark:text-slate-400'}`}>Referencias</button>
                 </div>
             </nav>
             <main className="flex items-start justify-center">
@@ -276,7 +352,27 @@ const UserPage = ({ user }) => {
                     userTokens={userTokens}
                 />}
                 {activeTab === 'bulletin' && <BulletinBoard user={user} />}
+                {activeTab === 'support' && <Support user={user} />}
+                {activeTab === 'referrals' && <ReferralProgram user={user} />}
             </main>
+            
+            {/* Payment Success Animation Overlay */}
+            {showPaymentSuccess && paymentData && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="relative">
+                        <button 
+                            onClick={() => setShowPaymentSuccess(false)}
+                            className="absolute top-4 right-4 text-white hover:text-gray-300 text-2xl z-10"
+                        >
+                            ×
+                        </button>
+                        <PaymentSuccessAnimation 
+                            paymentData={paymentData}
+                            onClose={() => setShowPaymentSuccess(false)}
+                        />
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

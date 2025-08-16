@@ -1,4 +1,8 @@
 {
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
   "storage": {
     "rules": "storage.rules"
   },
@@ -23,8 +27,16 @@
     },
     "firestore": {
       "host": "0.0.0.0",
-      "port": 8080,
+      "port": 8081,
       "rules": "firestore.rules"
+    },
+    "functions": {
+      "host": "0.0.0.0",
+      "port": 5001
+    },
+    "hosting": {
+      "host": "0.0.0.0",
+      "port": 5000
     },
     "storage": {
       "host": "0.0.0.0",

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 // Corrected import: Added getDoc and updateDoc to the list
 import { collection, onSnapshot, addDoc, query, orderBy, serverTimestamp, getDocs, deleteDoc, doc, where, getDoc, updateDoc, increment } from 'firebase/firestore';
 import { db } from '../../firebase';
@@ -45,12 +45,47 @@ const BulletinBoard = ({ user, isAdmin = false }) => {
     const [topics, setTopics] = useState([]);
     const [selectedTopic, setSelectedTopic] = useState({ id: 'general', name: 'General', logo: '📢' });
     const [punishmentMinutes, setPunishmentMinutes] = useState(0);
+    const [notifications, setNotifications] = useState([]);
+    const [allUsers, setAllUsers] = useState([]);
+    const [mentionSuggestions, setMentionSuggestions] = useState([]);
+    const [mentionQuery, setMentionQuery] = useState('');
+    const [mentionStart, setMentionStart] = useState(null);
+    const [userRole, setUserRole] = useState(null);
+    const textareaRef = useRef(null);
 
     useEffect(() => {
         getDocs(collection(db, 'censoredWords')).then(s => setCensoredWords(s.docs.map(d => d.data().word)));
         onSnapshot(query(collection(db, 'topics'), orderBy('name')), s => setTopics(s.docs.map(d => ({ id: d.id, ...d.data() }))));
         onSnapshot(doc(db, 'config', 'punishments'), doc => setPunishmentMinutes(doc.data()?.penaltyMinutes || 0));
     }, []);
+
+    // Get user role from Firestore
+    useEffect(() => {
+        if (!user?.uid) return;
+        const unsub = onSnapshot(doc(db, 'users', user.uid), (doc) => {
+            if (doc.exists()) {
+                const userData = doc.data();
+                setUserRole(userData.role || 'user');
+            }
+        });
+        return unsub;
+    }, [user?.uid]);
+
+    useEffect(() => {
+        const unsub = onSnapshot(collection(db, 'users'), snap => {
+            setAllUsers(snap.docs.map(d => d.data().username).filter(u => u));
+        });
+        return unsub;
+    }, []);
+
+    useEffect(() => {
+        if (!user?.uid) return;
+        const q = query(collection(db, 'notifications'), where('toUserId', '==', user.uid), orderBy('createdAt', 'desc'));
+        const unsub = onSnapshot(q, snap => {
+            setNotifications(snap.docs.map(doc => ({id: doc.id, ...doc.data()})));
+        });
+        return unsub;
+    }, [user]);
 
     useEffect(() => {
         const q = selectedTopic.id === 'general'
@@ -60,8 +95,61 @@ const BulletinBoard = ({ user, isAdmin = false }) => {
         return () => unsub();
     }, [selectedTopic]);
 
+    const handleNewPostChange = (e) => {
+        const value = e.target.value;
+        setNewPost(value);
+        const cursorPos = e.target.selectionStart;
+        const textBefore = value.slice(0, cursorPos);
+        const lastAtIndex = textBefore.lastIndexOf('@');
+        if (lastAtIndex !== -1) {
+            const queryText = textBefore.slice(lastAtIndex + 1);
+            if (!/\s/.test(queryText)) {
+                setMentionQuery(queryText.toLowerCase());
+                setMentionStart(lastAtIndex);
+            } else {
+                setMentionQuery('');
+                setMentionStart(null);
+            }
+        } else {
+            setMentionQuery('');
+            setMentionStart(null);
+        }
+    };
+
+    useEffect(() => {
+        if (mentionQuery) {
+            const suggestions = allUsers.filter(u => u.toLowerCase().startsWith(mentionQuery)).slice(0, 5);
+            setMentionSuggestions(suggestions);
+        } else {
+            setMentionSuggestions([]);
+        }
+    }, [mentionQuery, allUsers]);
+
+    const handleSelectMention = (selected) => {
+        const textBefore = newPost.slice(0, mentionStart + 1);
+        const textAfter = newPost.slice(mentionStart + 1 + mentionQuery.length);
+        const newText = textBefore + selected + ' ' + textAfter;
+        setNewPost(newText);
+        setMentionQuery('');
+        setMentionStart(null);
+        setMentionSuggestions([]);
+        // Set cursor position
+        setTimeout(() => {
+            const newCursorPos = mentionStart + 1 + selected.length + 1;
+            textareaRef.current.focus();
+            textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+        }, 0);
+    };
+
     const submitPost = async () => {
         if (!newPost.trim()) return;
+
+        // Check if user can post: admin, reporter role, or topic-specific permissions
+        const canPost = isAdmin || userRole === 'reporter' || selectedTopic.canWrite;
+        if (!canPost) {
+            alert("Solo los administradores o usuarios con rol de reportero pueden publicar en la comunidad.");
+            return;
+        }
 
         const currentTopicCanWrite = selectedTopic.id === 'general' ? isAdmin : (selectedTopic.canWrite || isAdmin);
         if (!currentTopicCanWrite) {
@@ -92,7 +180,7 @@ const BulletinBoard = ({ user, isAdmin = false }) => {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         const username = userDoc.data()?.username || 'Usuario Anónimo';
 
-        await addDoc(collection(db, 'posts'), {
+        const postRef = await addDoc(collection(db, 'posts'), {
             text: newPost, // Post the original, uncensored text if it passes
             authorUsername: username,
             authorEmail: user.email,
@@ -101,6 +189,34 @@ const BulletinBoard = ({ user, isAdmin = false }) => {
             topicName: selectedTopic.name,
             createdAt: serverTimestamp()
         });
+        const postId = postRef.id;
+
+        // --- NOTIFICATION LOGIC FOR TAGS ---
+        const tags = newPost.match(/@([a-zA-Z0-9_]+)/g) || [];
+        for (const tag of tags) {
+            const taggedUsername = tag.slice(1);
+            const usersQuery = query(collection(db, 'users'), where('username', '==', taggedUsername));
+            const userSnapshot = await getDocs(usersQuery);
+            if (!userSnapshot.empty) {
+                const taggedUserId = userSnapshot.docs[0].id;
+                if (taggedUserId !== user.uid) { // Avoid self-notification
+                    await addDoc(collection(db, 'notifications'), {
+                        toUserId: taggedUserId,
+                        fromUserId: user.uid,
+                        fromUsername: username,
+                        messageId: postId,
+                        topicId: selectedTopic.id,
+                        topicName: selectedTopic.name,
+                        type: 'mention',
+                        textSnippet: newPost.slice(0, 50) + (newPost.length > 50 ? '...' : ''),
+                        createdAt: serverTimestamp(),
+                        read: false
+                    });
+                }
+            }
+        }
+        // --- END OF NOTIFICATION LOGIC ---
+
         setNewPost('');
         setIsLoading(false);
     };
@@ -123,7 +239,17 @@ const BulletinBoard = ({ user, isAdmin = false }) => {
         }
     };
 
-    const canPostInCurrentChannel = isAdmin || selectedTopic?.canWrite;
+    // Determine if user can post in current channel
+    const canPostInCurrentChannel = isAdmin || userRole === 'reporter' || selectedTopic?.canWrite;
+    
+    // Get permission message
+    const getPermissionMessage = () => {
+        if (isAdmin) return "Escribe un mensaje en la comunidad...";
+        if (userRole === 'reporter') return "Escribe un mensaje en la comunidad...";
+        return "Solo los administradores o usuarios con rol de reportero pueden publicar. Los usuarios pueden comentar.";
+    };
+
+    const unreadCount = notifications.filter(n => !n.read).length;
 
     return (
         <div className="max-w-7xl w-full mx-auto flex flex-col md:flex-row gap-8">
@@ -131,6 +257,15 @@ const BulletinBoard = ({ user, isAdmin = false }) => {
             <aside className="md:w-64 bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-xl flex-shrink-0">
                 <h3 className="font-bold text-lg text-slate-800 dark:text-slate-200 mb-4 px-2">Canales</h3>
                 <ul className="space-y-1">
+                    <li>
+                        <button 
+                            onClick={() => setSelectedTopic({id: 'notifications', name: 'Notificaciones', logo: '🔔', canWrite: false})} 
+                            className={`w-full text-left px-3 py-2 rounded-lg font-semibold flex items-center gap-2 ${selectedTopic?.id === 'notifications' ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                        >
+                            <span>🔔</span>
+                            <span>Notificaciones {unreadCount > 0 && <span className="ml-2 px-2 py-1 bg-red-500 text-white rounded-full text-xs">{unreadCount}</span>}</span>
+                        </button>
+                    </li>
                     <li><button onClick={() => setSelectedTopic({id: 'general', name: 'General', logo: '📢', canWrite: false})} className={`w-full text-left px-3 py-2 rounded-lg font-semibold flex items-center gap-2 ${selectedTopic?.id === 'general' ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}><span>📢</span><span>General</span></button></li>
                     {topics.map(topic => (
                         <li key={topic.id}><button onClick={() => setSelectedTopic(topic)} className={`w-full text-left px-3 py-2 rounded-lg font-semibold flex items-center gap-2 ${selectedTopic?.id === topic.id ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}><span>{topic.logo}</span><span>{topic.name}</span></button></li>
@@ -139,37 +274,95 @@ const BulletinBoard = ({ user, isAdmin = false }) => {
             </aside>
 
             <div className="flex-1">
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-xl mb-8">
-                    <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200 mb-4">Mural: #{selectedTopic?.name || 'General'}</h2>
-                    <form onSubmit={handleFormSubmit}>
-                        <textarea 
-                            value={newPost} 
-                            onChange={e => setNewPost(e.target.value)} 
-                            onKeyDown={handleTextareaKeyPress}
-                            placeholder={canPostInCurrentChannel ? `Escribe un mensaje en #${selectedTopic?.name || 'General'}...` : 'Solo los administradores pueden publicar aquí.'} 
-                            className="w-full p-3 bg-slate-50 dark:bg-slate-700 border rounded-lg" 
-                            rows="3"
-                            disabled={!canPostInCurrentChannel}
-                        />
-                        <button type="submit" disabled={isLoading || !canPostInCurrentChannel} className="w-full mt-2 flex justify-center items-center bg-blue-600 text-white font-bold py-3 rounded-lg disabled:bg-slate-400 disabled:cursor-not-allowed">
-                            {isLoading ? <Spinner /> : 'Publicar'}
-                        </button>
-                    </form>
-                </div>
-                <div className="space-y-4">
-                    {posts.map(post => (
-                        <div key={post.id} className={`p-4 rounded-xl shadow-lg ${post.authorEmail === 'lejzer36@gmail.com' ? 'bg-blue-50 dark:bg-blue-900/50' : 'bg-white dark:bg-slate-800'}`}>
-                            <PostRenderer text={post.text} topics={topics} onTopicClick={setSelectedTopic} />
-                            <div className="flex justify-between items-center mt-2">
-                                <div className="flex items-center gap-2">
-                                    <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">{post.authorUsername}</p>
-                                    <RoleBadge postAuthorEmail={post.authorEmail} />
-                                </div>
-                                {isAdmin && (<button onClick={() => handleDeletePost(post.id)} className="text-xs text-red-500 hover:underline">Eliminar</button>)}
+                {selectedTopic.id === 'notifications' ? (
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-xl">
+                        <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200 mb-4">Notificaciones</h2>
+                        {notifications.length === 0 ? (
+                            <p className="text-slate-500 dark:text-slate-400">No tienes notificaciones.</p>
+                        ) : (
+                            <div className="space-y-4">
+                                {notifications.map(notif => (
+                                    <div key={notif.id} className={`p-4 rounded-xl shadow-lg ${notif.read ? 'bg-white dark:bg-slate-800' : 'bg-blue-50 dark:bg-blue-900/50'}`}>
+                                        <p className="font-semibold text-slate-800 dark:text-slate-200">{notif.fromUsername} te mencionó en #{notif.topicName}</p>
+                                        <p className="text-slate-700 dark:text-slate-300">{notif.textSnippet}</p>
+                                        <button 
+                                            onClick={async () => {
+                                                await updateDoc(doc(db, 'notifications', notif.id), { read: true });
+                                                const topic = notif.topicId === 'general' 
+                                                    ? { id: 'general', name: 'General', logo: '📢', canWrite: false }
+                                                    : topics.find(t => t.id === notif.topicId);
+                                                if (topic) setSelectedTopic(topic);
+                                            }} 
+                                            className="mt-2 text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+                                        >
+                                            Ver publicación
+                                        </button>
+                                    </div>
+                                ))}
                             </div>
+                        )}
+                    </div>
+                ) : (
+                    <>
+                        <div className="relative bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-xl mb-8">
+                            <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200 mb-4">Mural: #{selectedTopic?.name || 'General'}</h2>
+                            <form onSubmit={handleFormSubmit}>
+                                <textarea 
+                                    ref={textareaRef}
+                                    value={newPost} 
+                                    onChange={handleNewPostChange} 
+                                    onKeyDown={handleTextareaKeyPress}
+                                    placeholder={getPermissionMessage()}
+                                    className="w-full p-3 bg-slate-50 dark:bg-slate-700 border rounded-lg text-slate-700 dark:text-slate-200" 
+                                    rows="3"
+                                    disabled={!canPostInCurrentChannel}
+                                />
+                                {!canPostInCurrentChannel && (
+                                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 text-center">
+                                        💡 Los usuarios pueden comentar en las publicaciones existentes
+                                    </p>
+                                )}
+                                {mentionSuggestions.length > 0 && (
+                                    <ul className="absolute z-10 w-full max-w-md bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg shadow-lg mt-1 max-h-40 overflow-y-auto">
+                                        {mentionSuggestions.map((sugg, idx) => (
+                                            <li 
+                                                key={idx} 
+                                                onClick={() => handleSelectMention(sugg)} 
+                                                className="px-4 py-2 text-slate-800 dark:text-slate-200 hover:bg-blue-100 dark:hover:bg-blue-900/50 cursor-pointer"
+                                            >
+                                                @{sugg}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                                <button type="submit" disabled={isLoading || !canPostInCurrentChannel} className="w-full mt-2 flex justify-center items-center bg-blue-600 text-white font-bold py-3 rounded-lg disabled:bg-slate-400 disabled:cursor-not-allowed">
+                                    {isLoading ? <Spinner /> : (canPostInCurrentChannel ? 'Publicar' : 'Solo Lectura')}
+                                </button>
+                                {!canPostInCurrentChannel && (
+                                    <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                                        <p className="text-sm text-blue-800 dark:text-blue-200 text-center">
+                                            🔒 <strong>Modo Solo Lectura:</strong> Puedes ver y comentar, pero no publicar nuevos mensajes.
+                                        </p>
+                                    </div>
+                                )}
+                            </form>
                         </div>
-                    ))}
-                </div>
+                        <div className="space-y-4">
+                            {posts.map(post => (
+                                <div key={post.id} className={`p-4 rounded-xl shadow-lg ${post.authorEmail === 'lejzer36@gmail.com' ? 'bg-blue-50 dark:bg-blue-900/50' : 'bg-white dark:bg-slate-800'}`}>
+                                    <PostRenderer text={post.text} topics={topics} onTopicClick={setSelectedTopic} />
+                                    <div className="flex justify-between items-center mt-2">
+                                        <div className="flex items-center gap-2">
+                                            <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">{post.authorUsername}</p>
+                                            <RoleBadge postAuthorEmail={post.authorEmail} />
+                                        </div>
+                                        {isAdmin && (<button onClick={() => handleDeletePost(post.id)} className="text-xs text-red-500 hover:underline">Eliminar</button>)}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </>
+                )}
             </div>
         </div>
     );
