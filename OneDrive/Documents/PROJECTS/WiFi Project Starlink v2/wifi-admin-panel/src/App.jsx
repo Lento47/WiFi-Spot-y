@@ -2,7 +2,7 @@ import React, { useState, useEffect, createContext, useContext } from 'react';
 import { useAuth } from './hooks/useAuth';
 import AuthPage from './components/auth/AuthPage.jsx';
 import AdminPage from './pages/AdminPage.jsx';
-import UserPage from './pages/userPage.jsx';
+import UserPage from './pages/UserPage.jsx';
 import Spinner from './components/common/Spinner.jsx';
 import { auth } from './firebase';
 import Icon from './components/common/Icon.jsx';
