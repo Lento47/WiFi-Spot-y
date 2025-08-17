@@ -47,6 +47,7 @@ const BulletinBoard = ({ user, isAdmin = false }) => {
     const [punishmentMinutes, setPunishmentMinutes] = useState(0);
     const [notifications, setNotifications] = useState([]);
     const [allUsers, setAllUsers] = useState([]);
+    const [showOpenOnly, setShowOpenOnly] = useState(false);
     const [mentionSuggestions, setMentionSuggestions] = useState([]);
     const [mentionQuery, setMentionQuery] = useState('');
     const [mentionStart, setMentionStart] = useState(null);
@@ -55,7 +56,18 @@ const BulletinBoard = ({ user, isAdmin = false }) => {
 
     useEffect(() => {
         getDocs(collection(db, 'censoredWords')).then(s => setCensoredWords(s.docs.map(d => d.data().word)));
-        onSnapshot(query(collection(db, 'topics'), orderBy('name')), s => setTopics(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+        // Fetch channels from muralChannels collection (admin-created channels)
+        onSnapshot(query(collection(db, 'muralChannels'), orderBy('name')), s => {
+            const channelsData = s.docs.map(d => ({ 
+                id: d.id, 
+                ...d.data(),
+                // Map admin channel data to expected format
+                logo: d.data().logo || '📢',
+                isOpen: d.data().isActive !== false,
+                canWrite: d.data().allowedRoles?.includes('user') || d.data().allowedRoles?.includes('admin')
+            }));
+            setTopics(channelsData);
+        });
         onSnapshot(doc(db, 'config', 'punishments'), doc => setPunishmentMinutes(doc.data()?.penaltyMinutes || 0));
     }, []);
 
@@ -73,7 +85,12 @@ const BulletinBoard = ({ user, isAdmin = false }) => {
 
     useEffect(() => {
         const unsub = onSnapshot(collection(db, 'users'), snap => {
-            setAllUsers(snap.docs.map(d => d.data().username).filter(u => u));
+            const users = snap.docs.map(d => ({
+                id: d.id,
+                username: d.data().username,
+                role: d.data().role || 'user'
+            })).filter(u => u.username);
+            setAllUsers(users);
         });
         return unsub;
     }, []);
@@ -117,13 +134,29 @@ const BulletinBoard = ({ user, isAdmin = false }) => {
     };
 
     useEffect(() => {
+        const hasSupportKeyword = (text) => {
+            const t = (text || '').toLowerCase();
+            return t.includes('support') || t.includes('soporte');
+        };
         if (mentionQuery) {
-            const suggestions = allUsers.filter(u => u.toLowerCase().startsWith(mentionQuery)).slice(0, 5);
+            let candidates = allUsers;
+            // If not admin, only allow tagging admins and only when message contains support keyword
+            if (!isAdmin && userRole !== 'reporter') {
+                if (!hasSupportKeyword(newPost)) {
+                    setMentionSuggestions([]);
+                    return;
+                }
+                candidates = allUsers.filter(u => u.role === 'admin');
+            }
+            const suggestions = candidates
+                .map(u => u.username)
+                .filter(name => name.toLowerCase().startsWith(mentionQuery))
+                .slice(0, 5);
             setMentionSuggestions(suggestions);
         } else {
             setMentionSuggestions([]);
         }
-    }, [mentionQuery, allUsers]);
+    }, [mentionQuery, allUsers, isAdmin, userRole, newPost]);
 
     const handleSelectMention = (selected) => {
         const textBefore = newPost.slice(0, mentionStart + 1);
@@ -193,13 +226,25 @@ const BulletinBoard = ({ user, isAdmin = false }) => {
 
         // --- NOTIFICATION LOGIC FOR TAGS ---
         const tags = newPost.match(/@([a-zA-Z0-9_]+)/g) || [];
+        const hasSupportKeyword = (text) => {
+            const t = (text || '').toLowerCase();
+            return t.includes('support') || t.includes('soporte');
+        };
         for (const tag of tags) {
             const taggedUsername = tag.slice(1);
-            const usersQuery = query(collection(db, 'users'), where('username', '==', taggedUsername));
-            const userSnapshot = await getDocs(usersQuery);
+            const usersQueryRef = query(collection(db, 'users'), where('username', '==', taggedUsername));
+            const userSnapshot = await getDocs(usersQueryRef);
             if (!userSnapshot.empty) {
-                const taggedUserId = userSnapshot.docs[0].id;
-                if (taggedUserId !== user.uid) { // Avoid self-notification
+                const taggedDoc = userSnapshot.docs[0];
+                const taggedUserId = taggedDoc.id;
+                const taggedRole = taggedDoc.data()?.role || 'user';
+                // Permission: admin can tag anyone; non-admin can only tag admins AND only when message contains 'support'
+                if (!isAdmin && userRole !== 'reporter') {
+                    if (!(hasSupportKeyword(newPost) && taggedRole === 'admin')) {
+                        continue;
+                    }
+                }
+                if (taggedUserId !== user.uid) {
                     await addDoc(collection(db, 'notifications'), {
                         toUserId: taggedUserId,
                         fromUserId: user.uid,
@@ -240,12 +285,25 @@ const BulletinBoard = ({ user, isAdmin = false }) => {
     };
 
     // Determine if user can post in current channel
-    const canPostInCurrentChannel = isAdmin || userRole === 'reporter' || selectedTopic?.canWrite;
+    // Users and admins can post in any channel EXCEPT the general channel
+    // General channel is read-only for everyone
+    const canPostInCurrentChannel = selectedTopic?.id !== 'general' && (
+        isAdmin || 
+        userRole === 'reporter' || 
+        selectedTopic?.canWrite || 
+        selectedTopic?.isOpen === true
+    );
     
     // Get permission message
     const getPermissionMessage = () => {
+        if (selectedTopic?.id === 'general') {
+            return "El canal General es de solo lectura para todos los usuarios.";
+        }
         if (isAdmin) return "Escribe un mensaje en la comunidad...";
         if (userRole === 'reporter') return "Escribe un mensaje en la comunidad...";
+        if (selectedTopic?.canWrite || selectedTopic?.isOpen === true) {
+            return "Escribe un mensaje en la comunidad...";
+        }
         return "Solo los administradores o usuarios con rol de reportero pueden publicar. Los usuarios pueden comentar.";
     };
 
@@ -255,7 +313,12 @@ const BulletinBoard = ({ user, isAdmin = false }) => {
         <div className="max-w-7xl w-full mx-auto flex flex-col md:flex-row gap-8">
             {/* Sidebar and Main Content (UI is unchanged) */}
             <aside className="md:w-64 bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-xl flex-shrink-0">
-                <h3 className="font-bold text-lg text-slate-800 dark:text-slate-200 mb-4 px-2">Canales</h3>
+                <div className="flex items-center justify-between mb-2 px-2">
+                    <h3 className="font-bold text-lg text-slate-800 dark:text-slate-200">Canales</h3>
+                    <label className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                        <input type="checkbox" checked={showOpenOnly} onChange={(e)=>setShowOpenOnly(e.target.checked)} /> Abiertos
+                    </label>
+                </div>
                 <ul className="space-y-1">
                     <li>
                         <button 
@@ -267,8 +330,21 @@ const BulletinBoard = ({ user, isAdmin = false }) => {
                         </button>
                     </li>
                     <li><button onClick={() => setSelectedTopic({id: 'general', name: 'General', logo: '📢', canWrite: false})} className={`w-full text-left px-3 py-2 rounded-lg font-semibold flex items-center gap-2 ${selectedTopic?.id === 'general' ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}><span>📢</span><span>General</span></button></li>
-                    {topics.map(topic => (
-                        <li key={topic.id}><button onClick={() => setSelectedTopic(topic)} className={`w-full text-left px-3 py-2 rounded-lg font-semibold flex items-center gap-2 ${selectedTopic?.id === topic.id ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}><span>{topic.logo}</span><span>{topic.name}</span></button></li>
+                    {topics
+                        .filter(t => !showOpenOnly || t.isOpen === true)
+                        .map(topic => (
+                            <li key={topic.id}>
+                                <button 
+                                    onClick={() => setSelectedTopic(topic)} 
+                                    className={`w-full text-left px-3 py-2 rounded-lg font-semibold flex items-center gap-2 ${selectedTopic?.id === topic.id ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                                >
+                                    <span>{topic.logo}</span>
+                                    <span>{topic.name}</span>
+                                    {topic.isOpen === false && (
+                                        <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">Cerrado</span>
+                                    )}
+                                </button>
+                            </li>
                     ))}
                 </ul>
             </aside>

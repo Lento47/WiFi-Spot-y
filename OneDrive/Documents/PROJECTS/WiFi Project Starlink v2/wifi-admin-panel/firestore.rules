@@ -25,6 +25,21 @@ service cloud.firestore {
              request.auth.token.email == 'lejzer36@gmail.com');
     }
 
+    // WiFi access tokens - users can create tokens for themselves
+    match /wifiTokens/{tokenId} {
+        allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+        allow read: if request.auth != null && (
+            resource.data.userId == request.auth.uid ||
+            request.auth.token.email == 'lejzer36@gmail.com' ||
+            request.auth.token.email == 'lejzerv@gmail.com'
+        );
+        allow update, delete: if request.auth != null && (
+            resource.data.userId == request.auth.uid ||
+            request.auth.token.email == 'lejzer36@gmail.com' ||
+            request.auth.token.email == 'lejzerv@gmail.com'
+        );
+    }
+
     // Support tickets - users can create and manage their own
     match /supportTickets/{ticketId} {
         allow create, read, update, delete: if request.auth != null;
@@ -114,6 +129,7 @@ service cloud.firestore {
              collection == 'users' ||
              collection == 'referrals' ||
              collection == 'referralShares' ||
+             collection == 'wifiTokens' ||
              collection == 'supportTickets' ||
              collection == 'notifications' ||
              collection == 'payments');

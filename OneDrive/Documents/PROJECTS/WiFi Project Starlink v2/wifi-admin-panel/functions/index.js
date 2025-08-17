@@ -14,6 +14,25 @@ initializeApp();
 // Import notification triggers AFTER initializing the app
 const notificationTriggers = require('./notificationTriggers');
 
+// CORS configuration for development
+const corsOptions = {
+  origin: [
+    'http://localhost:5173',  // Vite dev server
+    'http://localhost:3000',  // Alternative dev port
+    'http://127.0.0.1:5173', // Alternative localhost
+    'http://127.0.0.1:3000'  // Alternative localhost
+  ],
+  credentials: true
+};
+
+// Helper function to add CORS headers
+const addCorsHeaders = (response) => {
+  response.set('Access-Control-Allow-Origin', '*');
+  response.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  response.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  return response;
+};
+
 // --- Email Notification Function (No changes) ---
 const gmailEmail = process.env.GMAIL_EMAIL;
 const gmailPassword = process.env.GMAIL_PASSWORD;
@@ -22,39 +41,491 @@ const mailTransport = nodemailer.createTransport({
   auth: { user: gmailEmail, pass: gmailPassword },
 });
 
+// Function to manually assign card tier to user
+exports.assignCardTier = onCall({
+  cors: corsOptions
+}, async (request) => {
+  const { userId, cardTier } = request.data;
+  
+  if (!userId || !cardTier) {
+    throw new HttpsError('invalid-argument', 'userId and cardTier are required');
+  }
+  
+  try {
+    const db = getFirestore();
+    await db.collection("users").doc(userId).update({
+      'cardTier': cardTier,
+      'cardTierUpdatedAt': new Date()
+    });
+    
+    log(`Assigned ${cardTier} card tier to user ${userId}`);
+    return { success: true, message: `Card tier updated to ${cardTier}` };
+  } catch (error) {
+    log(`Error assigning card tier to user ${userId}:`, error);
+    throw new HttpsError('internal', 'Error updating card tier');
+  }
+});
+
+// Function to track token usage and consume GB
+exports.trackTokenUsage = onCall({
+  cors: corsOptions
+}, async (request) => {
+  const { userId, tokenId, dataUsage, duration, deviceInfo } = request.data;
+  
+  if (!userId || !tokenId) {
+    throw new HttpsError('invalid-argument', 'userId and tokenId are required');
+  }
+  
+  try {
+    const db = getFirestore();
+    
+    // Get user document to check available GB
+    const userDoc = await db.collection("users").doc(userId).get();
+    if (!userDoc.exists) {
+      throw new HttpsError('not-found', 'User not found');
+    }
+    
+    const userData = userDoc.data();
+    // Ensure GB values are numbers, not strings
+    const currentGb = parseFloat(userData.credits?.gb) || 0;
+    const dataUsageNum = parseFloat(dataUsage) || 0;
+    
+    // Calculate GB to consume (if dataUsage is provided)
+    let gbToConsume = 0;
+    if (dataUsageNum > 0) {
+      gbToConsume = Math.min(dataUsageNum, currentGb); // Don't consume more than available
+    }
+    
+    // Update user GB credits
+    const newGb = Math.max(0, currentGb - gbToConsume);
+    
+
+    
+    // Create usage record
+    const usageData = {
+      userId,
+      tokenId,
+      dataUsage: gbToConsume,
+      duration,
+      deviceInfo: deviceInfo || {},
+      timestamp: new Date(),
+      consumedGb: gbToConsume,
+      remainingGb: newGb
+    };
+    
+    // Add to usage collection
+    await db.collection("tokenUsage").add(usageData);
+    
+    // Update user GB credits
+    await db.collection("users").doc(userId).update({
+      'credits.gb': newGb,
+      'credits.lastUpdated': new Date()
+    });
+    
+    // Update token status
+    await db.collection("wifiTokens").doc(tokenId).update({
+      'lastUsed': new Date(),
+      'dataConsumed': FieldValue.increment(gbToConsume),
+      'isActive': newGb > 0
+    });
+    
+    log(`Tracked token usage for user ${userId}: consumed ${gbToConsume}GB, remaining ${newGb}GB`);
+    
+    return { 
+      success: true, 
+      consumedGb: gbToConsume, 
+      remainingGb: newGb,
+      message: `Usage tracked successfully. Consumed: ${gbToConsume}GB, Remaining: ${newGb}GB`
+    };
+    
+  } catch (error) {
+    log(`Error tracking token usage for user ${userId}:`, error);
+    throw new HttpsError('internal', 'Error tracking token usage');
+  }
+});
+
+// Function to get consumption analytics
+exports.getConsumptionAnalytics = onCall({
+  cors: corsOptions
+}, async (request) => {
+  const { startDate, endDate, userId } = request.data;
+  
+  try {
+    const db = getFirestore();
+    
+    let query = db.collection("tokenUsage");
+    
+    // Add date filters if provided
+    if (startDate) {
+      query = query.where("timestamp", ">=", new Date(startDate));
+    }
+    if (endDate) {
+      query = query.where("timestamp", "<=", new Date(endDate));
+    }
+    
+    // Add user filter if provided
+    if (userId) {
+      query = query.where("userId", "==", userId);
+    }
+    
+    const snapshot = await query.get();
+    const usageData = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    
+    // Calculate analytics
+    const totalGbConsumed = usageData.reduce((sum, usage) => sum + (usage.consumedGb || 0), 0);
+    const totalSessions = usageData.length;
+    const averageSessionGb = totalSessions > 0 ? totalGbConsumed / totalSessions : 0;
+    
+    // Group by hour of day
+    const hourlyUsage = {};
+    usageData.forEach(usage => {
+      const hour = new Date(usage.timestamp.toDate()).getHours();
+      hourlyUsage[hour] = (hourlyUsage[hour] || 0) + (usage.consumedGb || 0);
+    });
+    
+    // Group by day of week
+    const dailyUsage = {};
+    usageData.forEach(usage => {
+      const day = new Date(usage.timestamp.toDate()).getDay();
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      dailyUsage[dayNames[day]] = (dailyUsage[dayNames[day]] || 0) + (usage.consumedGb || 0);
+    });
+    
+    return {
+      success: true,
+      analytics: {
+        totalGbConsumed,
+        totalSessions,
+        averageSessionGb,
+        hourlyUsage,
+        dailyUsage,
+        usageData: usageData.slice(0, 100) // Limit to last 100 records
+      }
+    };
+    
+  } catch (error) {
+    log(`Error getting consumption analytics:`, error);
+    throw new HttpsError('internal', 'Error getting consumption analytics');
+  }
+});
+
+// Function to create sample token usage data for testing
+exports.createSampleTokenUsage = onCall({
+  cors: corsOptions
+}, async (request) => {
+  try {
+    const db = getFirestore();
+    
+    log('Starting to create sample token usage data...');
+    
+    // Get all users
+    const usersSnapshot = await db.collection("users").get();
+    log(`Found ${usersSnapshot.size} users`);
+    
+    if (usersSnapshot.empty) {
+      log('No users found, returning early');
+      return { success: false, message: 'No users found' };
+    }
+    
+    const users = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    let createdCount = 0;
+    
+    // Create just a few sample records for testing
+    for (const user of users.slice(0, 3)) { // Limit to first 3 users
+      try {
+        // Create 2-3 sample usage records per user
+        const numRecords = Math.floor(Math.random() * 2) + 2;
+        
+        for (let i = 0; i < numRecords; i++) {
+          const timestamp = new Date();
+          timestamp.setDate(timestamp.getDate() - Math.floor(Math.random() * 7)); // Random date in last 7 days
+          timestamp.setHours(Math.floor(Math.random() * 24)); // Random hour
+          
+          const dataUsage = Math.random() * 2 + 0.5; // Random GB between 0.5-2.5
+          
+          const usageData = {
+            userId: user.id,
+            tokenId: `sample-token-${user.id}-${i}`,
+            dataUsage: dataUsage,
+            duration: Math.floor(Math.random() * 60) + 30, // Random duration 30-90 minutes
+            deviceInfo: {
+              device: 'Sample Device',
+              os: 'Sample OS',
+              browser: 'Sample Browser'
+            },
+            timestamp: timestamp,
+            consumedGb: dataUsage,
+            remainingGb: Math.max(0, (user.credits?.gb || 0) - dataUsage)
+          };
+          
+          await db.collection("tokenUsage").add(usageData);
+          createdCount++;
+          
+          log(`Created sample record ${i + 1} for user ${user.id}`);
+        }
+      } catch (userError) {
+        log(`Error creating records for user ${user.id}:`, userError);
+        // Continue with other users
+      }
+    }
+    
+    log(`Successfully created ${createdCount} sample token usage records for ${users.length} users`);
+    
+    return { 
+      success: true, 
+      message: `Created ${createdCount} sample records`,
+      createdCount,
+      userCount: users.length
+    };
+    
+  } catch (error) {
+    log(`Error creating sample token usage:`, error);
+    log(`Error details:`, {
+      message: error.message,
+      stack: error.stack,
+      code: error.code
+    });
+    throw new HttpsError('internal', `Error creating sample token usage: ${error.message}`);
+  }
+});
+
 exports.onPaymentApproved = onDocumentUpdated("payments/{paymentId}", async (event) => {
   const before = event.data.before.data();
   const after = event.data.after.data();
 
   if (before.status === "pending" && after.status === "approved") {
     const userId = after.userId;
-    const userDoc = await getFirestore().collection("users").doc(userId).get();
+    const db = getFirestore();
     
-    if (!userDoc.exists) {
-      log(`User document ${userId} does not exist.`);
-      return;
-    }
-    
-    const userData = userDoc.data();
-    const userEmail = userData?.email || after.userEmail;
-
-    if (!userEmail) {
-      log(`User ${userId} does not have an email.`);
-      return;
-    }
-
-    const mailOptions = {
-      from: `"Portal Wi-Fi" <${gmailEmail}>`,
-      to: userEmail,
-      subject: "¡Tu pago ha sido aprobado!",
-      text: `¡Hola! Tu pago para el paquete "${after.packageName}" ha sido aprobado. Tus créditos han sido añadidos a tu cuenta. ¡Gracias!`,
-    };
-
     try {
-      await mailTransport.sendMail(mailOptions);
-      log("Approval email sent to:", userEmail);
+      // Get user document
+      const userDoc = await db.collection("users").doc(userId).get();
+      
+      if (!userDoc.exists) {
+        log(`User document ${userId} does not exist.`);
+        return;
+      }
+      
+      const userData = userDoc.data();
+      const userEmail = userData?.email || after.userEmail;
+
+      if (!userEmail) {
+        log(`User ${userId} does not have an email.`);
+        return;
+      }
+
+      // Get package details to add credits
+      let packageData = null;
+      let hoursToAdd = 0;
+      let minutesToAdd = 0;
+      
+      // Get package ID and name from payment data
+      const packageId = after.packageId || after.selectedPackage;
+      const packageName = after.packageName;
+      const packageType = after.packageType; // New field from payment
+      const packageDataAmount = after.packageDataAmount; // New field from payment
+      
+      log(`Looking for package with ID: ${packageId} and name: ${packageName}`);
+      log(`Payment package type: ${packageType}, data amount: ${packageDataAmount}`);
+      
+      // If payment has package type and data amount, use those directly
+      if (packageType && packageType === 'data' && packageDataAmount) {
+        log(`Using payment data: type=${packageType}, dataAmount=${packageDataAmount} GB`);
+        packageData = {
+          type: 'data',
+          dataAmount: packageDataAmount,
+          name: packageName
+        };
+      } else {
+        // Try to get package by ID
+        if (packageId) {
+          const packageDoc = await db.collection("timePackages").doc(packageId).get();
+          if (packageDoc.exists) {
+            packageData = packageDoc.data();
+            log(`Found package data for ID ${packageId}:`, packageData);
+          } else {
+            log(`Package with ID ${packageId} not found`);
+          }
+        }
+        
+        // If no package found by ID, try to find by name
+        if (!packageData && packageName) {
+          log(`Searching for package by name: "${packageName}"`);
+          const packagesQuery = await db.collection("timePackages").where("name", "==", packageName).get();
+          if (!packagesQuery.empty) {
+            packageData = packagesQuery.docs[0].data();
+            log(`Found package data by name "${packageName}":`, packageData);
+          } else {
+            log(`No package found with name "${packageName}"`);
+          }
+        }
+      }
+      
+      if (!packageData) {
+        log(`No package data found for payment. Using fallback calculation.`);
+      }
+      
+      // Calculate credits to add
+      if (packageData) {
+        // Check if this is a data package or time package
+        // First check explicit type field
+        let packageType = packageData.type;
+        
+        // If no explicit type, try to detect from package name or dataAmount field
+        if (!packageType) {
+          if (packageData.dataAmount || packageData.dataAmount === 0) {
+            packageType = 'data';
+          } else if (packageName && (packageName.toLowerCase().includes('gb') || packageName.toLowerCase().includes('gigabyte') || packageName.toLowerCase().includes('data'))) {
+            packageType = 'data';
+          } else {
+            packageType = 'time';
+          }
+        }
+        
+        log(`Detected package type: ${packageType} for package: ${packageName}`);
+        
+        if (packageType === 'data') {
+          // Data package - add GB
+          const gbToAdd = packageData.dataAmount || packageData.duration || 0;
+          log(`Data package: ${gbToAdd} GB`);
+          
+          // Update user data credits - preserve existing credits
+          const currentCredits = userData.credits || { hours: 0, minutes: 0, gb: 0 };
+          // Ensure GB values are numbers, not strings
+          const currentGb = parseFloat(currentCredits.gb) || 0;
+          const gbToAddNum = parseFloat(gbToAdd) || 0;
+          const newGb = currentGb + gbToAddNum;
+          
+
+          
+          await db.collection("users").doc(userId).update({
+            'credits.gb': newGb,
+            'credits.hours': currentCredits.hours || 0,
+            'credits.minutes': currentCredits.minutes || 0,
+            'credits.lastUpdated': new Date()
+          });
+          
+          log(`Updated user ${userId} data credits: +${gbToAdd} GB. New total: ${newGb} GB`);
+          
+          // Send approval email for data package
+          const mailOptions = {
+            from: `"Portal Wi-Fi" <${gmailEmail}>`,
+            to: userEmail,
+            subject: "¡Tu paquete de datos ha sido aprobado!",
+            text: `¡Hola! Tu pago para el paquete de datos "${after.packageName || 'WiFi'}" ha sido aprobado. Se han añadido ${gbToAdd} GB a tu cuenta. Nuevo total: ${newGb} GB. ¡Gracias!`,
+          };
+          
+          await mailTransport.sendMail(mailOptions);
+          log("Data package approval email sent to:", userEmail);
+          
+        } else {
+          // Time package - add hours/minutes
+          const duration = packageData.duration || 0;
+          const durationUnit = packageData.durationUnit || 'hours';
+          
+          log(`Time package duration: ${duration} ${durationUnit}`);
+          
+          if (durationUnit === 'hours') {
+            hoursToAdd = duration;
+          } else if (durationUnit === 'minutes') {
+            minutesToAdd = duration;
+          } else if (durationUnit === 'days') {
+            hoursToAdd = duration * 24;
+          } else if (durationUnit === 'weeks') {
+            hoursToAdd = duration * 24 * 7;
+          } else if (durationUnit === 'months') {
+            hoursToAdd = duration * 24 * 30;
+          }
+          
+          log(`Calculated credits from time package: ${hoursToAdd}h ${minutesToAdd}m`);
+          
+          // Update user time credits - preserve existing GB credits
+          const currentCredits = userData.credits || { hours: 0, minutes: 0, gb: 0 };
+          // Ensure time values are numbers, not strings
+          const currentHours = parseInt(currentCredits.hours) || 0;
+          const currentMinutes = parseInt(currentCredits.minutes) || 0;
+          const hoursToAddNum = parseInt(hoursToAdd) || 0;
+          const minutesToAddNum = parseInt(minutesToAdd) || 0;
+          let newHours = currentHours + hoursToAddNum;
+          let newMinutes = currentMinutes + minutesToAddNum;
+          
+          // Convert excess minutes to hours
+          if (newMinutes >= 60) {
+            newHours += Math.floor(newMinutes / 60);
+            newMinutes = newMinutes % 60;
+          }
+
+          await db.collection("users").doc(userId).update({
+            'credits.hours': newHours,
+            'credits.minutes': newMinutes,
+            'credits.gb': currentCredits.gb || 0,
+            'credits.lastUpdated': new Date()
+          });
+
+          log(`Updated user ${userId} time credits: +${hoursToAdd}h ${minutesToAdd}m. New total: ${newHours}h ${newMinutes}m`);
+
+          // Send approval email for time package
+          const mailOptions = {
+            from: `"Portal Wi-Fi" <${gmailEmail}>`,
+            to: userEmail,
+            subject: "¡Tu pago ha sido aprobado!",
+            text: `¡Hola! Tu pago para el paquete "${after.packageName || 'WiFi'}" ha sido aprobado. Se han añadido ${hoursToAdd}h ${minutesToAdd}m a tu cuenta. Nuevo total: ${newHours}h ${newMinutes}m. ¡Gracias!`,
+          };
+
+          await mailTransport.sendMail(mailOptions);
+          log("Time package approval email sent to:", userEmail);
+        }
+      } else {
+        // Fallback: convert payment amount to credits (1 hour per 500 CRC)
+        const paymentAmount = after.amount || after.packagePrice || 0;
+        hoursToAdd = Math.floor(paymentAmount / 500);
+        minutesToAdd = Math.floor((paymentAmount % 500) / 8.33); // 8.33 CRC per minute
+        
+        log(`No package data found, using fallback calculation. Payment amount: ${paymentAmount}, Credits: ${hoursToAdd}h ${minutesToAdd}m`);
+        
+        // Update user credits with fallback calculation
+        const currentCredits = userData.credits || { hours: 0, minutes: 0, gb: 0 };
+        // Ensure time values are numbers, not strings
+        const currentHours = parseInt(currentCredits.hours) || 0;
+        const currentMinutes = parseInt(currentCredits.minutes) || 0;
+        const hoursToAddNum = parseInt(hoursToAdd) || 0;
+        const minutesToAddNum = parseInt(minutesToAdd) || 0;
+        let newHours = currentHours + hoursToAddNum;
+        let newMinutes = currentMinutes + minutesToAddNum;
+        
+        // Convert excess minutes to hours
+        if (newMinutes >= 60) {
+          newHours += Math.floor(newMinutes / 60);
+          newMinutes = newMinutes % 60;
+        }
+
+        await db.collection("users").doc(userId).update({
+          'credits.hours': newHours,
+          'credits.minutes': newMinutes,
+          'credits.gb': currentCredits.gb || 0,
+          'credits.lastUpdated': new Date()
+        });
+
+        log(`Updated user ${userId} credits with fallback: +${hoursToAdd}h ${minutesToAdd}m. New total: ${newHours}h ${newMinutes}m`);
+
+        // Send approval email for fallback
+        const mailOptions = {
+          from: `"Portal Wi-Fi" <${gmailEmail}>`,
+          to: userEmail,
+          subject: "¡Tu pago ha sido aprobado!",
+          text: `¡Hola! Tu pago ha sido aprobado. Se han añadido ${hoursToAdd}h ${minutesToAdd}m a tu cuenta. Nuevo total: ${newHours}h ${newMinutes}m. ¡Gracias!`,
+        };
+
+        await mailTransport.sendMail(mailOptions);
+        log("Fallback approval email sent to:", userEmail);
+      }
+
     } catch (error) {
-      console.error("Error sending email:", error);
+      log(`Error processing payment approval for user ${userId}:`, error);
+      console.error("Error in onPaymentApproved:", error);
     }
   }
 });

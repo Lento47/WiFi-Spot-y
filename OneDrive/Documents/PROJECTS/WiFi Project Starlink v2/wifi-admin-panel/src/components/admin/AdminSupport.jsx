@@ -210,28 +210,28 @@ const AdminSupport = () => {
     return (
         <div className="space-y-6">
             {/* Header with Stats */}
-            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
                 <div className="flex justify-between items-center mb-6">
                     <div>
-                        <h2 className="text-2xl font-bold text-gray-800 mb-2">
+                        <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">
                             Gestión de Soporte Técnico
                         </h2>
-                        <p className="text-gray-600">
+                        <p className="text-gray-600 dark:text-gray-400">
                             Administre todos los tickets de soporte del sistema
                         </p>
                     </div>
                                          <div className="flex items-center gap-4">
                          <div className="text-center">
-                             <div className="text-2xl font-bold text-blue-600">{tickets.filter(t => t.status === 'open').length}</div>
-                             <div className="text-sm text-gray-600">Abiertos</div>
+                             <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{tickets.filter(t => t.status === 'open').length}</div>
+                             <div className="text-sm text-gray-600 dark:text-gray-400">Abiertos</div>
                          </div>
                          <div className="text-center">
-                             <div className="text-2xl font-bold text-orange-600">{tickets.filter(t => t.status === 'in_progress').length}</div>
-                             <div className="text-sm text-gray-600">En Progreso</div>
+                             <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{tickets.filter(t => t.status === 'in_progress').length}</div>
+                             <div className="text-sm text-gray-600 dark:text-gray-400">En Progreso</div>
                          </div>
                          <div className="text-center">
-                             <div className="text-2xl font-bold text-green-600">{tickets.filter(t => t.status === 'resolved').length}</div>
-                             <div className="text-sm text-gray-600">Resueltos</div>
+                             <div className="text-2xl font-bold text-green-600 dark:text-green-400">{tickets.filter(t => t.status === 'resolved').length}</div>
+                             <div className="text-sm text-gray-600 dark:text-gray-400">Resueltos</div>
                          </div>
                          
                          {/* Debug Button */}
@@ -269,7 +269,7 @@ const AdminSupport = () => {
                             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                                 filterStatus === status
                                     ? `${label.bgColor} ${label.textColor} border-2 border-current`
-                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                             }`}
                         >
                             {label.label}
@@ -279,8 +279,8 @@ const AdminSupport = () => {
                         onClick={() => setFilterStatus('all')}
                         className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                             filterStatus === 'all'
-                                ? 'bg-blue-100 text-blue-600 border-2 border-blue-600'
-                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 border-2 border-blue-600 dark:border-blue-400'
+                                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                         }`}
                     >
                         Todos
@@ -296,7 +296,7 @@ const AdminSupport = () => {
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 placeholder={`Buscar por ${searchType === 'id' ? 'ID del ticket' : searchType === 'email' ? 'email del usuario' : 'asunto'}...`}
-                                className="w-full px-4 py-2 pl-10 pr-20 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full px-4 py-2 pl-10 pr-20 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-700 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                                 title="Presiona Ctrl+F (o Cmd+F) para buscar rápidamente"
                             />
                             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">

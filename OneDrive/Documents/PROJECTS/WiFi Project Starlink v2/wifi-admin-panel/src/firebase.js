@@ -2,6 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, connectAuthEmulator } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator, collection, addDoc, serverTimestamp, getDocs } from 'firebase/firestore';
 import { getStorage, connectStorageEmulator } from 'firebase/storage';
+import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 
 // Your project's Firebase configuration
 const firebaseConfig = {
@@ -16,6 +17,11 @@ const firebaseConfig = {
 
 // --- IMPORTANT ---
 // Your PC's local IP address for Firebase emulator access from phone
+// Make sure Firebase emulators are running on these ports:
+// - Auth: 9099
+// - Firestore: 8083  
+// - Storage: 9199
+// - Functions: 5001
 const EMULATOR_HOST = "10.0.175.113"; 
 
 // Initialize Firebase
@@ -25,6 +31,7 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+export const functions = getFunctions(app);
 
 // Connect to emulators if running in a development environment
 // Set this to true to use Firebase emulators (for phone testing)
@@ -40,6 +47,7 @@ if (import.meta.env.DEV && USE_EMULATORS) {
   });
   connectFirestoreEmulator(db, EMULATOR_HOST, 8083);
   connectStorageEmulator(storage, EMULATOR_HOST, 9199);
+  connectFunctionsEmulator(functions, EMULATOR_HOST, 5001);
 
   // Initialize sample network status data for demonstration
   // Temporarily disabled to avoid permission issues during testing

@@ -68,12 +68,13 @@ const QRCode = ({ value, size }) => {
 
 
 // The main component for the virtual data card
-const VirtualCreditCard = ({ userCredits = { hours: 0, minutes: 0 }, user, theme }) => {
+const VirtualDataCard = ({ userCredits = { gb: 0 }, user, theme }) => {
     // State to manage the card's tier, flip state, and QR code visibility
     const [cardType, setCardType] = useState('common'); // common, standard, premium, vip
     const [isFlipped, setIsFlipped] = useState(false);
     const [showQRCode, setShowQRCode] = useState(false);
     const [qrCodeData, setQrCodeData] = useState('');
+    const [copied, setCopied] = useState(false);
     const [generationStatus, setGenerationStatus] = useState('');
 
     // Determine card type based on user GB credits and optional admin-assigned tier
@@ -83,11 +84,11 @@ const VirtualCreditCard = ({ userCredits = { hours: 0, minutes: 0 }, user, theme
             setCardType(user.cardTier);
         } else {
             // Auto-assign based on GB credits
-            if (userCredits.hours >= 100) {
+            if (userCredits.gb >= 100) {
                 setCardType('vip');
-            } else if (userCredits.hours >= 50) {
+            } else if (userCredits.gb >= 50) {
                 setCardType('premium');
-            } else if (userCredits.hours >= 10) {
+            } else if (userCredits.gb >= 10) {
                 setCardType('standard');
             } else {
                 setCardType('common');
@@ -112,40 +113,40 @@ const VirtualCreditCard = ({ userCredits = { hours: 0, minutes: 0 }, user, theme
     const getCardConfig = (type) => {
         const configs = {
             common: {
-                name: 'Celestial Data Card',
+                name: 'Common Data Card',
                 accent: 'bg-gray-500',
                 icon: CommonIcon,
-                features: ['WiFi Access', 'Basic Support', 'Standard Speeds'],
+                features: ['Basic Data Access', 'Standard Support'],
                 gradient: 'linear-gradient(135deg, #1A1A1A 0%, #303030 100%)',
                 glow: 'shadow-gray-800/50',
-                backgroundEffect: 'bg-[url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'100%25\' height=\'100%25\' viewBox=\'0 0 100 100\'%3E%3Cfilter id=\'noiseFilter\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23noiseFilter)\' opacity=\'0.1\'/%3E%3C/svg%3E")]',
+                backgroundEffect: 'bg-[url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'100\' height=\'100\' viewBox=\'0 0 100 100\'%3E%3Cline x1=\'0\' y1=\'0\' x2=\'100\' y2=\'100\' stroke=\'rgba(255,255,255,0.05)\' stroke-width=\'2\'/%3E%3Cline x1=\'100\' y1=\'0\' x2=\'0\' y2=\'100\' stroke=\'rgba(255,255,255,0.05)\' stroke-width=\'2\'/%3E%3C/svg%3E")] opacity-5'
             },
             standard: {
-                name: 'Nebula Data Card',
+                name: 'Standard Data Card',
                 accent: 'bg-blue-500',
                 icon: StandardIcon,
-                features: ['WiFi Access', 'Priority Support', 'Bonus Credits'],
+                features: ['Enhanced Data Access', 'Priority Support', 'Bonus Data'],
                 gradient: 'linear-gradient(135deg, #0A1C41 0%, #1A54A6 100%)',
                 glow: 'shadow-blue-700/50',
-                backgroundEffect: 'bg-[url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'100%25\' height=\'100%25\' viewBox=\'0 0 100 100\'%3E%3Ccircle cx=\'50\' cy=\'50\' r=\'40\' fill=\'none\' stroke=\'rgba(255,255,255,0.2)\' stroke-width=\'1\'/%3E%3Ccircle cx=\'50\' cy=\'50\' r=\'30\' fill=\'none\' stroke=\'rgba(255,255,255,0.1)\' stroke-width=\'1\'/%3E%3Cpath d=\'M50 0 L100 50 L50 100 L0 50 Z\' fill=\'none\' stroke=\'rgba(255,255,255,0.1)\' stroke-width=\'1\'/%3E%3C/svg%3E")]',
+                backgroundEffect: 'bg-[url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'100\' height=\'100\' viewBox=\'0 0 100 100\'%3E%3Cpath fill=\'none\' stroke=\'rgba(255,255,255,0.1)\' stroke-width=\'1\' d=\'M10 50 A40 40 0 0 1 50 10 M50 10 A40 40 0 0 1 90 50 M90 50 A40 40 0 0 1 50 90 M50 90 A40 40 0 0 1 10 50 Z\'/%3E%3Cpath fill=\'none\' stroke=\'rgba(255,255,255,0.1)\' stroke-width=\'1\' d=\'M15 50 A35 35 0 0 1 50 15 M50 15 A35 35 0 0 1 85 50 M85 50 A35 35 0 0 1 50 85 M50 85 A35 35 0 0 1 15 50 Z\'/%3E%3C/svg%3E")] opacity-10'
             },
             premium: {
-                name: 'Cosmic Data Card',
+                name: 'Premium Data Card',
                 accent: 'bg-purple-500',
                 icon: PremiumIcon,
-                features: ['WiFi Access', 'Dedicated Support', 'Generous Bonus Credits', 'Fast Lane'],
+                features: ['Premium Access', 'Dedicated Support', 'Generous Bonus Data', 'Fast Lane'],
                 gradient: 'linear-gradient(135deg, #270A4D 0%, #6E33B8 100%)',
                 glow: 'shadow-purple-700/50',
-                backgroundEffect: 'bg-[url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'100%25\' height=\'100%25\' viewBox=\'0 0 100 100\'%3E%3Cdefs%3E%3CradialGradient id=\'grad1\' cx=\'50%25\' cy=\'50%25\' r=\'50%25\'%3E%3Cstop offset=\'0%25\' style=\'stop-color:rgba(255,255,255,0.2);stop-opacity:1\' /%3E%3Cstop offset=\'100%25\' style=\'stop-color:rgba(255,255,255,0);stop-opacity:1\' /%3E%3C/radialGradient%3E%3C/defs%3E%3Crect width=\'100%25\' height=\'100%25\' fill=\'url(%23grad1)\'/%3E%3C/svg%3E")]',
+                backgroundEffect: 'bg-[url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'100\' height=\'100\' viewBox=\'0 0 100 100\'%3E%3Cpath d=\'M50 0 L100 50 L50 100 L0 50 Z\' fill=\'rgba(255,255,255,0.05)\'/%3E%3Cpath d=\'M75 25 L75 75 L25 75 Z\' fill=\'rgba(255,255,255,0.05)\'/%3E%3C/svg%3E")] opacity-20'
             },
             vip: {
-                name: 'Stellar Data Card',
+                name: 'VIP Data Card',
                 accent: 'bg-yellow-500',
                 icon: VIPIcon,
-                features: ['WiFi Access', '24/7 Concierge Support', 'Maximum Credits', 'Fast Lane', 'Exclusive Access'],
+                features: ['VIP Access', '24/7 Concierge Support', 'Unlimited Data', 'Exclusive Features'],
                 gradient: 'linear-gradient(135deg, #4B330F 0%, #A3761D 100%)',
                 glow: 'shadow-yellow-700/50',
-                backgroundEffect: 'bg-[url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'100%25\' height=\'100%25\' viewBox=\'0 0 100 100\'%3E%3Cpath d=\'M50 0 L100 50 L50 100 L0 50 Z\' fill=\'rgba(255,255,255,0.05)\'/%3E%3Ccircle cx=\'50\' cy=\'50\' r=\'40\' fill=\'none\' stroke=\'rgba(255,255,255,0.2)\' stroke-width=\'2\'/%3E%3Cpath d=\'M10 50 A40 40 0 0 1 50 10\' fill=\'none\' stroke=\'rgba(255,255,255,0.3)\' stroke-width=\'2\'/%3E%3Cpath d=\'M90 50 A40 40 0 0 1 50 90\' fill=\'none\' stroke=\'rgba(255,255,255,0.3)\' stroke-width=\'2\'/%3E%3C/svg%3E")]',
+                backgroundEffect: 'bg-[url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'100\' height=\'100\' viewBox=\'0 0 100 100\'%3E%3Cpath d=\'M50 0 L100 50 L50 100 L0 50 Z\' fill=\'rgba(255,255,255,0.05)\'/%3E%3Ccircle cx=\'50\' cy=\'50\' r=\'40\' fill=\'none\' stroke=\'rgba(255,255,255,0.2)\' stroke-width=\'2\'/%3E%3Cpath d=\'M10 50 A40 40 0 0 1 50 10\' fill=\'none\' stroke=\'rgba(255,255,255,0.3)\' stroke-width=\'2\'/%3E%3Cpath d=\'M90 50 A40 40 0 0 1 50 90\' fill=\'none\' stroke=\'rgba(255,255,255,0.3)\' stroke-width=\'2\'/%3E%3C/svg%3E")] opacity-30'
             }
         };
         return configs[type] || configs.common;
@@ -156,7 +157,7 @@ const VirtualCreditCard = ({ userCredits = { hours: 0, minutes: 0 }, user, theme
 
     // Disabled for now as it requires backend logic
     const downloadCard = () => {
-        setGenerationStatus('Descarga deshabilitada por ahora. Requiere configuración backend.');
+        setGenerationStatus('Download feature is disabled for now. It requires backend configuration.');
         setTimeout(() => setGenerationStatus(''), 3000);
     };
 
@@ -165,15 +166,15 @@ const VirtualCreditCard = ({ userCredits = { hours: 0, minutes: 0 }, user, theme
         if (navigator.share) {
             try {
                 await navigator.share({
-                    title: `Mi Tarjeta WiFi ${config.name}`,
-                    text: `¡Mira mi tarjeta WiFi ${config.name}!`,
+                    title: `My ${config.name}`,
+                    text: `Check out my ${config.name} with ${userCredits.gb} GB available!`,
                     url: window.location.href
                 });
             } catch (error) {
                 console.error('Error sharing:', error);
             }
         } else {
-            const shareText = `My ${config.name} - ${userCredits.hours}h ${userCredits.minutes}m available.`;
+            const shareText = `My ${config.name} - ${userCredits.gb} GB available.`;
             // Use execCommand for broader compatibility within iframes
             try {
                 const textarea = document.createElement('textarea');
@@ -192,24 +193,40 @@ const VirtualCreditCard = ({ userCredits = { hours: 0, minutes: 0 }, user, theme
         }
     };
 
+    // Copies a given text string to the clipboard
+    const copyToClipboard = (text) => {
+        try {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch (error) {
+            console.error('Error copying to clipboard:', error);
+        }
+    };
+
     return (
-        <div className="max-w-md mx-auto p-3 sm:p-4 md:p-6 bg-white dark:bg-gray-900 rounded-2xl sm:rounded-3xl shadow-xl sm:shadow-2xl font-inter text-gray-800 dark:text-white">
+        <div className="max-w-md mx-auto p-4 md:p-6 bg-white dark:bg-gray-900 rounded-3xl shadow-2xl font-inter text-gray-800 dark:text-white">
             {/* Card Display */}
-            <div className="relative mb-6 sm:mb-8 perspective-1000">
+            <div className="relative mb-8 perspective-1000">
                 <motion.div
-                    className={`relative w-full h-48 sm:h-56 rounded-xl sm:rounded-2xl overflow-hidden cursor-pointer transform-gpu transition-transform duration-700 ease-in-out ${
+                    className={`relative w-full h-56 rounded-2xl overflow-hidden cursor-pointer transform-gpu transition-transform duration-700 ease-in-out ${
                         isFlipped ? '[transform:rotateY(180deg)]' : ''
                     }`}
                     style={{
                         transformStyle: 'preserve-3d',
-                        boxShadow: `0 15px 40px -10px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.1), 0 0 30px -15px ${config.glow}`
+                        boxShadow: `0 20px 60px -10px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.1), 0 0 50px -15px ${config.glow}`
                     }}
                     onClick={() => setIsFlipped(!isFlipped)}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                 >
                     {/* Front of Card */}
-                    <div className="absolute inset-0 p-4 sm:p-6 flex flex-col justify-between"
+                    <div className="absolute inset-0 p-6 flex flex-col justify-between"
                          style={{ background: config.gradient, backfaceVisibility: 'hidden' }}>
                         {/* Background Effects */}
                         <div className={`absolute inset-0 z-0 bg-cover bg-center ${config.backgroundEffect}`}></div>
@@ -217,21 +234,21 @@ const VirtualCreditCard = ({ userCredits = { hours: 0, minutes: 0 }, user, theme
                         {/* Header */}
                         <div className="flex justify-between items-center relative z-10">
                             <div className="flex items-center">
-                                <CardIcon className="w-6 h-6 sm:w-8 sm:h-8 mr-2 text-white" />
+                                <CardIcon className="w-8 h-8 mr-2 text-white" />
                                 <div>
-                                    <h3 className="text-base sm:text-xl font-bold tracking-tight text-white">{config.name}</h3>
+                                    <h3 className="text-xl font-bold tracking-tight text-white">{config.name}</h3>
                                     <p className="text-xs opacity-80 text-white">WiFi Hub</p>
                                 </div>
                             </div>
-                            <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center`}>
-                                <FiShield className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                            <div className={`w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center`}>
+                                <FiShield className="w-5 h-5 text-white" />
                             </div>
                         </div>
 
                         {/* Card Number & User Info */}
                         <div className="relative z-10">
-                            <div className="text-xs sm:text-sm font-light opacity-80 mb-1 text-white">Card Number</div>
-                            <div className="text-sm sm:text-lg font-mono tracking-widest text-white">
+                            <div className="text-sm font-light opacity-80 mb-1 text-white">Card Number</div>
+                            <div className="text-lg font-mono tracking-widest text-white">
                                 •••• •••• •••• {user?.uid?.slice(-4) || '0000'}
                             </div>
                         </div>
@@ -239,29 +256,29 @@ const VirtualCreditCard = ({ userCredits = { hours: 0, minutes: 0 }, user, theme
                         {/* User & Credits */}
                         <div className="flex justify-between items-end relative z-10">
                             <div>
-                                <div className="text-xs sm:text-sm font-light opacity-80 mb-1 text-white">Holder</div>
-                                <div className="text-sm sm:text-lg font-semibold text-white">
+                                <div className="text-sm font-light opacity-80 mb-1 text-white">Holder</div>
+                                <div className="text-lg font-semibold text-white">
                                     {user?.displayName || user?.email || 'WiFi User'}
                                 </div>
                             </div>
                             <div className="text-right">
-                                <div className="text-xs sm:text-sm font-light opacity-80 mb-1 text-white">Data Available</div>
-                                <div className="text-lg sm:text-2xl font-bold text-white">
-                                    {userCredits.hours}h {userCredits.minutes}m
+                                <div className="text-sm font-light opacity-80 mb-1 text-white">Data Available</div>
+                                <div className="text-2xl font-bold text-white">
+                                    {userCredits.gb || 0} GB
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     {/* Back of Card */}
-                    <div className="absolute inset-0 p-4 sm:p-6 flex flex-col justify-between bg-gray-900"
+                    <div className="absolute inset-0 p-6 flex flex-col justify-between bg-gray-900"
                          style={{ transform: 'rotateY(180deg)', backfaceVisibility: 'hidden' }}>
                         
                         {/* Security Strip */}
                         <div className="relative z-10">
-                            <div className="text-xs sm:text-sm font-light opacity-80 mb-1 text-white">Security Code</div>
-                            <div className="w-full h-6 sm:h-8 bg-gray-700 rounded mb-3 sm:mb-4"></div>
-                            <div className="text-xs sm:text-sm font-mono text-gray-300">•••</div>
+                            <div className="text-sm font-light opacity-80 mb-1 text-white">Security Code</div>
+                            <div className="w-full h-8 bg-gray-700 rounded mb-4"></div>
+                            <div className="text-sm font-mono text-gray-300">•••</div>
                         </div>
 
                         {/* QR Code */}
@@ -269,10 +286,10 @@ const VirtualCreditCard = ({ userCredits = { hours: 0, minutes: 0 }, user, theme
                             <div className="text-xs font-light text-gray-300 mb-2">Scan for Details</div>
                             <div className="bg-white p-2 rounded-lg shadow-lg">
                                 {showQRCode && qrCodeData ? (
-                                    <QRCode value={qrCodeData} size={80} level="H" />
+                                    <QRCode value={qrCodeData} size={100} level="H" />
                                 ) : (
-                                    <div className="w-[80px] h-[80px] sm:w-[100px] sm:h-[100px] bg-gray-200 rounded-md flex items-center justify-center text-gray-500">
-                                        <CommonIcon className="w-6 h-6 sm:w-8 sm:h-8" />
+                                    <div className="w-[100px] h-[100px] bg-gray-200 rounded-md flex items-center justify-center text-gray-500">
+                                        <CommonIcon className="w-8 h-8" />
                                     </div>
                                 )}
                             </div>
@@ -281,7 +298,7 @@ const VirtualCreditCard = ({ userCredits = { hours: 0, minutes: 0 }, user, theme
                         {/* Support Info */}
                         <div className="text-center relative z-10">
                             <div className="text-xs font-light text-gray-300 mb-1">Customer Support</div>
-                            <div className="text-xs sm:text-sm font-medium text-white">WiFi Hub Support</div>
+                            <div className="text-sm font-medium text-white">WiFi Hub Support</div>
                         </div>
                     </div>
                 </motion.div>
@@ -293,38 +310,36 @@ const VirtualCreditCard = ({ userCredits = { hours: 0, minutes: 0 }, user, theme
             </div>
 
             {/* Action Buttons */}
-            <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-6 sm:mb-8">
+            <div className="grid grid-cols-2 md:grid-cols-2 gap-4 mb-8">
                 <motion.button
                     onClick={downloadCard}
-                    className="bg-gradient-to-r from-green-500 to-emerald-600 text-white px-4 sm:px-6 py-3 sm:py-4 rounded-lg sm:rounded-xl font-semibold flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transition-all duration-200 text-sm sm:text-base"
+                    className="bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-4 rounded-xl font-semibold flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transition-all duration-200"
                     whileHover={{ scale: 1.05, y: -2 }}
                     whileTap={{ scale: 0.95 }}
                 >
-                    <FiDownload className="w-4 h-4 sm:w-5 sm:h-5" />
-                    <span className="hidden sm:inline">Download</span>
-                    <span className="sm:hidden">Descargar</span>
+                    <FiDownload className="w-5 h-5" />
+                    Download
                 </motion.button>
                 
                 <motion.button
                     onClick={shareCard}
-                    className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-4 sm:px-6 py-3 sm:py-4 rounded-lg sm:rounded-xl font-semibold flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transition-all duration-200 text-sm sm:text-base"
+                    className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-6 py-4 rounded-xl font-semibold flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transition-all duration-200"
                     whileHover={{ scale: 1.05, y: -2 }}
                     whileTap={{ scale: 0.95 }}
                 >
-                    <FiShare2 className="w-4 h-4 sm:w-5 sm:h-5" />
-                    <span className="hidden sm:inline">Share</span>
-                    <span className="sm:hidden">Compartir</span>
+                    <FiShare2 className="w-5 h-5" />
+                    Share
                 </motion.button>
             </div>
 
             {/* QR Code Toggle & Info */}
-            <div className="mb-6 sm:mb-8 text-center">
+            <div className="mb-8 text-center">
                 <motion.button
                     onClick={() => {
                         setIsFlipped(true);
                         setShowQRCode(!showQRCode);
                     }}
-                    className={`w-full py-3 sm:py-4 rounded-lg sm:rounded-xl font-medium transition-all duration-300 shadow-md text-sm sm:text-base ${
+                    className={`w-full py-4 rounded-xl font-medium transition-all duration-300 shadow-md ${
                         showQRCode
                             ? 'bg-purple-600 text-white hover:bg-purple-700'
                             : 'bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
@@ -336,44 +351,32 @@ const VirtualCreditCard = ({ userCredits = { hours: 0, minutes: 0 }, user, theme
                 </motion.button>
             </div>
 
-            {/* Generation Status */}
-            {generationStatus && (
-                <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="mb-6 p-4 bg-blue-100 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800 rounded-xl"
-                >
-                    <p className="text-blue-800 dark:text-blue-200 text-sm font-medium">{generationStatus}</p>
-                </motion.div>
-            )}
-
             {/* Card Tier Information */}
-            <div className="bg-gray-100 dark:bg-gray-800 rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-inner">
-                <h4 className="font-bold text-gray-800 dark:text-white mb-3 sm:mb-4 text-center text-base sm:text-lg">
+            <div className="bg-gray-100 dark:bg-gray-800 rounded-2xl p-6 shadow-inner">
+                <h4 className="font-bold text-gray-800 dark:text-white mb-4 text-center text-lg">
                     Data Card Information
                 </h4>
-                <div className="space-y-2 sm:space-y-3">
-                    <div className="flex items-center justify-between text-xs sm:text-sm">
+                <div className="space-y-3">
+                    <div className="flex items-center justify-between text-sm">
                         <span className="text-gray-600 dark:text-gray-400 font-medium">Type:</span>
                         <div className="flex items-center">
-                            <CardIcon className="w-3 h-3 sm:w-4 sm:h-4 mr-2" />
-                            <span className="font-semibold text-gray-800 dark:text-white capitalize text-xs sm:text-sm">{config.name}</span>
+                            <CardIcon className="w-4 h-4 mr-2" />
+                            <span className="font-semibold text-gray-800 dark:text-white capitalize">{config.name}</span>
                         </div>
                     </div>
-                    <div className="flex items-center justify-between text-xs sm:text-sm">
+                    <div className="flex items-center justify-between text-sm">
                         <span className="text-gray-600 dark:text-gray-400 font-medium">Data Available:</span>
                         <span className="font-semibold text-gray-800 dark:text-white">
-                            {userCredits.hours}h {userCredits.minutes}m
+                            {userCredits.gb || 0} GB
                         </span>
                     </div>
-                    <div className="flex items-center justify-between text-xs sm:text-sm">
+                    <div className="flex items-center justify-between text-sm">
                         <span className="text-gray-600 dark:text-gray-400 font-medium">Holder:</span>
                         <span className="font-semibold text-gray-800 dark:text-white">
                             {user?.displayName || user?.email || 'N/A'}
                         </span>
                     </div>
-                    <div className="flex items-center justify-between text-xs sm:text-sm">
+                    <div className="flex items-center justify-between text-sm">
                         <span className="text-gray-600 dark:text-gray-400 font-medium">Status:</span>
                         <span className="font-semibold text-green-600 dark:text-green-400">Active</span>
                     </div>
@@ -383,4 +386,4 @@ const VirtualCreditCard = ({ userCredits = { hours: 0, minutes: 0 }, user, theme
     );
 };
 
-export default VirtualCreditCard;
+export default VirtualDataCard;
