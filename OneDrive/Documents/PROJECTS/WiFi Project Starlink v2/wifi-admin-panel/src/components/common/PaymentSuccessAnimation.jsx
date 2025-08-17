@@ -76,13 +76,14 @@ const PaymentSuccessAnimation = ({
         try {
           // Create transaction validation data
           const validationData = {
-            transactionId: paymentData.sinpeId || `TXN_${Date.now()}`,
-            amount: paymentData.amount,
+            transactionId: paymentData.id || `TXN_${Date.now()}`,
+            amount: paymentData.packagePrice || paymentData.price,
             packageName: paymentData.packageName,
-            durationMinutes: paymentData.durationMinutes,
+            duration: paymentData.packageDuration || paymentData.duration,
             timestamp: paymentData.timestamp || Date.now(),
             status: 'pending_approval',
-            validationHash: btoa(`${paymentData.sinpeId || 'unknown'}_${paymentData.amount}_${Date.now()}`).slice(0, 16) // Simple hash for demo
+            receiptUrl: paymentData.receiptUrl,
+            validationHash: btoa(`${paymentData.id || 'unknown'}_${paymentData.packagePrice || 'unknown'}_${Date.now()}`).slice(0, 16) // Simple hash for demo
           };
           
           const qrData = JSON.stringify(validationData);
@@ -136,10 +137,10 @@ const PaymentSuccessAnimation = ({
       
       const link = document.createElement('a');
       if (format === 'png') {
-        link.download = `receipt-${paymentData.sinpeId || Date.now()}.png`;
+        link.download = `receipt-${paymentData.id || Date.now()}.png`;
         link.href = canvas.toDataURL('image/png');
       } else {
-        link.download = `receipt-${paymentData.sinpeId || Date.now()}.jpg`;
+        link.download = `receipt-${paymentData.id || Date.now()}.jpg`;
         link.href = canvas.toDataURL('image/jpeg', 0.9);
       }
       
@@ -158,7 +159,7 @@ const PaymentSuccessAnimation = ({
     setIsDownloading(true);
     try {
       const link = document.createElement('a');
-      link.download = `qr-validation-${paymentData.sinpeId || Date.now()}.png`;
+              link.download = `qr-validation-${paymentData.id || Date.now()}.png`;
       link.href = qrCodeDataUrl;
       link.click();
     } catch (error) {
@@ -193,12 +194,12 @@ const PaymentSuccessAnimation = ({
         {/* Receipt Content */}
         <div 
           ref={receiptRef}
-          className="bg-white dark:bg-slate-800 rounded-3xl p-8 shadow-2xl border border-gray-200 dark:border-slate-600"
+          className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-2xl border border-gray-200 dark:border-slate-600"
         >
           {/* Header */}
-          <div className="text-center mb-8">
+          <div className="text-center mb-6">
             <motion.div
-              className="flex justify-center mb-6"
+              className="flex justify-center mb-4"
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{
@@ -223,7 +224,7 @@ const PaymentSuccessAnimation = ({
                   }}
                 />
                 <Checkmark
-                  size={80}
+                  size={60}
                   strokeWidth={4}
                   color="rgb(16 185 129)"
                   className="relative z-10"
@@ -232,27 +233,27 @@ const PaymentSuccessAnimation = ({
             </motion.div>
             
             <motion.h2
-              className="text-2xl font-bold text-slate-800 dark:text-slate-200 mb-2"
+              className="text-xl font-bold text-slate-800 dark:text-slate-200 mb-1"
               initial={{ opacity: 0, y: 5 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 1, duration: 0.4 }}
             >
-              ¡Pago Exitoso!
+              ¡Pago Enviado!
             </motion.h2>
             
             <motion.p
-              className="text-slate-600 dark:text-slate-300"
+              className="text-sm text-slate-600 dark:text-slate-300"
               initial={{ opacity: 0, y: 5 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 1.1, duration: 0.4 }}
             >
-              Tu transacción ha sido procesada correctamente
+              Pendiente de aprobación
             </motion.p>
           </div>
 
           {/* Transaction Details */}
           <motion.div
-            className="space-y-4 mb-8"
+            className="space-y-3 mb-6"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{
@@ -262,63 +263,57 @@ const PaymentSuccessAnimation = ({
             }}
           >
             {/* Amount */}
-            <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl p-6 border border-blue-200">
+            <div className="bg-gradient-to-r from-slate-100 to-blue-100 dark:from-slate-600 dark:to-slate-500 rounded-xl p-4 border border-slate-300 dark:border-slate-400">
               <div className="text-center">
-                <span className="text-sm font-medium text-blue-600 mb-2 block">
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-300 mb-1 block">
                   Monto Pagado
                 </span>
-                <div className="text-3xl font-bold text-blue-700">
-                  {formatCurrency(paymentData.amount, 'CRC')}
+                <div className="text-2xl font-bold text-slate-800 dark:text-slate-200">
+                  {formatCurrency(paymentData.packagePrice || paymentData.price || 0, 'CRC')}
                 </div>
-                <div className="text-sm text-blue-600 mt-1">
+                <div className="text-xs text-slate-600 dark:text-slate-400 mt-1">
                   {paymentData.packageName || 'Paquete de WiFi'}
                 </div>
               </div>
             </div>
 
             {/* Transaction Info */}
-            <div className="bg-gray-50 dark:bg-slate-700 rounded-2xl p-4 border border-gray-200 dark:border-slate-600">
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-slate-600 dark:text-slate-400">ID de Transacción:</span>
-                  <span className="text-sm font-mono text-slate-800 dark:text-slate-200">
-                    {paymentData.sinpeId || 'N/A'}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">Paquete:</span>
-                  <span className="text-sm text-gray-800 dark:text-gray-200">
+            <div className="bg-gray-50 dark:bg-slate-700 rounded-xl p-3 border border-gray-200 dark:border-slate-600">
+              <div className="space-y-2">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-600 dark:text-slate-400">Paquete:</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">
                     {paymentData.packageName || 'N/A'}
                   </span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">Duración:</span>
-                  <span className="text-sm text-gray-800 dark:text-gray-200">
-                    {paymentData.durationMinutes ? `${Math.floor(paymentData.durationMinutes / 60)}h ${paymentData.durationMinutes % 60}m` : 'N/A'}
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-600 dark:text-slate-400">Duración:</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+                    {paymentData.packageDuration || paymentData.duration || 'N/A'}
                   </span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">SINPE ID:</span>
-                  <span className="text-sm text-gray-800 dark:text-gray-200">
-                    {paymentData.sinpeId || 'N/A'}
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-600 dark:text-slate-400">ID del Pago:</span>
+                  <span className="font-mono text-slate-800 dark:text-slate-200 text-xs">
+                    {paymentData.id || 'N/A'}
                   </span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">Fecha:</span>
-                  <span className="text-sm text-gray-800 dark:text-gray-200">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-600 dark:text-slate-400">Fecha:</span>
+                  <span className="text-slate-800 dark:text-slate-200">
                     {new Date(paymentData.timestamp || Date.now()).toLocaleDateString('es-CR')}
                   </span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">Hora:</span>
-                  <span className="text-sm text-gray-800 dark:text-gray-200">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-600 dark:text-slate-400">Hora:</span>
+                  <span className="text-slate-800 dark:text-slate-200">
                     {new Date(paymentData.timestamp || Date.now()).toLocaleTimeString('es-CR')}
                   </span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-slate-600 dark:text-slate-400">Estado:</span>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-600 dark:text-slate-400">Estado:</span>
                   <span className="px-2 py-1 bg-yellow-100 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-200 text-xs rounded-full font-medium">
-                    Pendiente de Aprobación
+                    Pendiente
                   </span>
                 </div>
               </div>
@@ -327,27 +322,27 @@ const PaymentSuccessAnimation = ({
             {/* QR Code for Transaction Validation */}
             {qrCodeDataUrl && (
               <motion.div
-                className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-slate-700 dark:to-slate-600 rounded-2xl p-6 border border-blue-200 dark:border-slate-600"
+                className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-slate-700 dark:to-slate-600 rounded-xl p-4 border border-blue-200 dark:border-slate-600"
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: 1.3, duration: 0.4 }}
               >
                 <div className="text-center">
-                  <h4 className="text-sm font-semibold text-blue-700 dark:text-blue-300 mb-3">
+                  <h4 className="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-2">
                     Código QR para Validación
                   </h4>
-                  <div className="flex justify-center mb-3">
+                  <div className="flex justify-center mb-2">
                     <img 
                       src={qrCodeDataUrl} 
                       alt="QR Code para validación de transacción"
-                      className="w-24 h-24 rounded-lg border-2 border-blue-200 dark:border-slate-500"
+                      className="w-20 h-20 rounded-lg border-2 border-blue-200 dark:border-slate-500"
                     />
                   </div>
                   <p className="text-xs text-blue-600 dark:text-blue-400">
-                    Escanea para verificar la transacción
+                    Escanea para verificar
                   </p>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    ID: {paymentData.sinpeId || 'N/A'}
+                    ID: {paymentData.id || 'N/A'}
                   </p>
                 </div>
               </motion.div>
@@ -361,23 +356,23 @@ const PaymentSuccessAnimation = ({
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 1.4, duration: 0.4 }}
           >
-            <div className="text-center mb-4">
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                Descarga tu recibo de pago
+            <div className="text-center mb-3">
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+                Descarga tu recibo
               </p>
             </div>
             
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 onClick={() => downloadReceipt('png')}
                 disabled={isDownloading}
-                className="flex items-center justify-center gap-2 px-3 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                className="flex items-center justify-center gap-1 px-2 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-xs"
               >
                 {isDownloading ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                 ) : (
                   <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                     PNG
@@ -388,13 +383,13 @@ const PaymentSuccessAnimation = ({
               <button
                 onClick={() => downloadReceipt('jpeg')}
                 disabled={isDownloading}
-                className="flex items-center justify-center gap-2 px-3 py-3 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                className="flex items-center justify-center gap-1 px-2 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-xs"
               >
                 {isDownloading ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                 ) : (
                   <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                     JPEG
@@ -405,13 +400,13 @@ const PaymentSuccessAnimation = ({
               <button
                 onClick={downloadQRCode}
                 disabled={isDownloading}
-                className="flex items-center justify-center gap-2 px-3 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                className="flex items-center justify-center gap-1 px-2 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-xs"
               >
                 {isDownloading ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                 ) : (
                   <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V6a1 1 0 00-1-1H5a1 1 0 00-1 1v1a1 1 0 001 1zm12 0h2a1 1 0 001-1V6a1 1 0 00-1-1h-2a1 1 0 00-1 1v1a1 1 0 001 1zM5 20h2a1 1 0 001-1v-1a1 1 0 00-1-1H5a1 1 0 00-1 1v1a1 1 0 001 1z" />
                     </svg>
                     QR
@@ -423,14 +418,14 @@ const PaymentSuccessAnimation = ({
 
           {/* Close Button */}
           <motion.div
-            className="mt-6 text-center"
+            className="mt-4 text-center"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 1.6, duration: 0.4 }}
           >
             <button
               onClick={onClose}
-              className="px-6 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
+              className="px-4 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors text-sm"
             >
               Cerrar
             </button>

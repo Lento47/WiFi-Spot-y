@@ -1,0 +1,52 @@
+{
+  "formatVersion": 1,
+  "passTypeIdentifier": "pass.com.wificostarica.wificredits",
+  "serialNumber": "wifi-credits-001",
+  "teamIdentifier": "TEAM123456",
+  "organizationName": "WiFi Costa Rica",
+  "description": "WiFi Credits Virtual Card",
+  "logoText": "WiFi CR",
+  "foregroundColor": "rgb(255, 255, 255)",
+  "backgroundColor": "rgb(0, 122, 255)",
+  "labelColor": "rgb(255, 255, 255)",
+  "generic": {
+    "primaryFields": [
+      {
+        "key": "credits",
+        "label": "Available Credits",
+        "value": "2h 30m"
+      }
+    ],
+    "secondaryFields": [
+      {
+        "key": "status",
+        "label": "Status",
+        "value": "Good"
+      },
+      {
+        "key": "email",
+        "label": "Account",
+        "value": "user@example.com"
+      }
+    ],
+    "auxiliaryFields": [
+      {
+        "key": "type",
+        "label": "Card Type",
+        "value": "VIRTUAL"
+      },
+      {
+        "key": "access",
+        "label": "Access",
+        "value": "WiFi + High Speed"
+      }
+    ]
+  },
+  "barcodes": [
+    {
+      "message": "{\"uid\":\"user123\",\"email\":\"user@example.com\",\"credits\":{\"hours\":2,\"minutes\":30},\"timestamp\":\"2024-01-01T00:00:00.000Z\"}",
+      "format": "PKBarcodeFormatQR",
+      "messageEncoding": "iso-8859-1"
+    }
+  ]
+}

@@ -15,7 +15,7 @@ const firebaseConfig = {
 };
 
 // --- IMPORTANT ---
-// This is your PC's local IP address from the Vite server output.
+// Your PC's local IP address for Firebase emulator access from phone
 const EMULATOR_HOST = "10.0.175.113"; 
 
 // Initialize Firebase
@@ -27,16 +27,25 @@ export const db = getFirestore(app);
 export const storage = getStorage(app);
 
 // Connect to emulators if running in a development environment
-if (import.meta.env.DEV) {
+// Set this to true to use Firebase emulators (for phone testing)
+const USE_EMULATORS = true;
+
+if (import.meta.env.DEV && USE_EMULATORS) {
   console.log(`Connecting to Firebase Emulators at ${EMULATOR_HOST}...`);
   
   // Point the SDKs to the emulators running on your PC
-  connectAuthEmulator(auth, `http://${EMULATOR_HOST}:9099`);
-  connectFirestoreEmulator(db, EMULATOR_HOST, 8081);
+  connectAuthEmulator(auth, `http://${EMULATOR_HOST}:9099`, { 
+    disableWarnings: true,
+    disableEmulatorWarnings: true
+  });
+  connectFirestoreEmulator(db, EMULATOR_HOST, 8083);
   connectStorageEmulator(storage, EMULATOR_HOST, 9199);
 
   // Initialize sample network status data for demonstration
-  initializeSampleData();
+  // Temporarily disabled to avoid permission issues during testing
+  // initializeSampleData();
+} else {
+  console.log('Using real Firebase services');
 }
 
 // Function to initialize sample network status data

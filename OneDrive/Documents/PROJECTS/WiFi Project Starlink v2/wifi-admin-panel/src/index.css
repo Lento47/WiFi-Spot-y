@@ -6,6 +6,17 @@ body {
   font-family: 'Inter', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  color: #1e293b; /* Default text color for light mode */
+}
+
+/* Dark mode base styles */
+.dark body {
+  color: #e2e8f0; /* Default text color for dark mode */
+}
+
+/* Ensure text is visible in both modes */
+.dark * {
+  color-scheme: dark;
 }
 h1, h2, h3, h4, h5, h6 {
   font-family: 'Inter', sans-serif;

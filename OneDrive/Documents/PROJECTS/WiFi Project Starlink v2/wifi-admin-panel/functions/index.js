@@ -29,7 +29,14 @@ exports.onPaymentApproved = onDocumentUpdated("payments/{paymentId}", async (eve
   if (before.status === "pending" && after.status === "approved") {
     const userId = after.userId;
     const userDoc = await getFirestore().collection("users").doc(userId).get();
-    const userEmail = userDoc.data().email;
+    
+    if (!userDoc.exists) {
+      log(`User document ${userId} does not exist.`);
+      return;
+    }
+    
+    const userData = userDoc.data();
+    const userEmail = userData?.email || after.userEmail;
 
     if (!userEmail) {
       log(`User ${userId} does not have an email.`);

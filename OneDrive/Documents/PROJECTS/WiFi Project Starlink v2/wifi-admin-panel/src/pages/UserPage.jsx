@@ -1,378 +1,606 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { FiUser, FiClock, FiSettings, FiHelpCircle, FiFileText, FiWifi, FiMessageCircle, FiUsers, FiLogOut, FiPackage } from 'react-icons/fi';
+import { RiRobot2Line } from 'react-icons/ri';
+import { useAuth } from '../hooks/useAuth';
+import { useTheme } from '../App';
 import { signOut } from 'firebase/auth';
-import { collection, doc, onSnapshot, updateDoc, serverTimestamp, setDoc, addDoc, query, where, orderBy, increment, writeBatch, getDocs } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '../firebase';
-import Spinner from '../components/common/Spinner.jsx';
-import Icon from '../components/common/Icon.jsx';
-import BulletinBoard from '../components/user/BulletinBoard.jsx';
-import EnhancedBulletinBoard from '../components/user/EnhancedBulletinBoard.jsx';
-import Support from '../components/user/Support.jsx';
-import ReferralProgram from '../components/user/ReferralProgram.jsx';
-import PaymentSuccessAnimation from '../components/common/PaymentSuccessAnimation.jsx';
-import { useTheme } from '../App.jsx';
+import { collection, addDoc, serverTimestamp, getDocs, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import PaymentSuccessAnimation from '../components/common/PaymentSuccessAnimation';
+import Support from '../components/user/Support';
+import BulletinBoard from '../components/user/BulletinBoard';
+import Help from '../components/user/Help';
+import AIChatbot from '../components/common/AIChatbot';
+import VirtualCreditCard from '../components/user/VirtualCreditCard';
 
-const ThemeToggleButton = () => {
+const UserPage = () => {
+    const { user, loading } = useAuth();
     const { theme, toggleTheme } = useTheme();
-    return (
-        <button onClick={toggleTheme} className="p-2 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
-            {theme === 'light' ? <Icon path="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" /> : <Icon path="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />}
-        </button>
-    );
-};
-
-const BuyCreditsView = ({ submission, setSubmission, timePackages, handleSubmitPurchase, isLoading }) => (
-    submission ? (
-         <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-xl text-center max-w-md w-full">
-            <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200 mb-4">{ {pending: "Solicitud Enviada", approved: "✅ ¡Aprobada!", rejected: "❌ Rechazada"}[submission.status] }</h2>
-            <button onClick={() => setSubmission(null)} className="mt-8 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold py-3 px-6 rounded-lg">Hacer otra solicitud</button>
-        </div>
-    ) : (
-         <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-xl max-w-md w-full">
-            <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200 mb-2">Comprar Créditos</h2>
-            <p className="mb-8 text-slate-500 dark:text-slate-400">Pague al SINPE <strong className="font-mono text-slate-700 dark:text-slate-300">8888-8888</strong>.</p>
-            <form onSubmit={handleSubmitPurchase}>
-                <div className="mb-4">
-                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Paquete</label>
-                    <select name="package" required className="w-full px-3 py-3 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-200">{timePackages.map(p => <option key={p.id} value={p.id} className="text-slate-700 dark:text-slate-200">{p.name} - ₡{p.price}</option>)}</select>
-                </div>
-                <div className="mb-4">
-                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1"># Comprobante</label>
-                    <input name="sinpe-id" required className="w-full px-3 py-3 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-200" />
-                </div>
-                <div className="mb-8">
-                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Recibo</label>
-                    <input type="file" name="receipt-file" required accept="image/*" className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:font-semibold file:bg-slate-50 dark:file:bg-slate-700 file:text-blue-700 dark:file:text-blue-300" />
-                </div>
-                <button type="submit" disabled={isLoading} className="w-full flex justify-center items-center bg-blue-600 text-white font-bold py-4 rounded-lg">{isLoading ? <Spinner /> : 'Enviar para Verificación'}</button>
-            </form>
-        </div>
-    )
-);
-
-const GenerateTokenView = ({ handleGenerateToken, minutesToUse, setMinutesToUse, userData, formatCredits, isLoading, generatedToken, userTokens }) => (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl w-full">
-        <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-xl">
-            <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200 mb-2">Generar Token</h2>
-            <p className="mb-8 text-slate-500 dark:text-slate-400">Use sus créditos para crear un token de acceso.</p>
-            <form onSubmit={handleGenerateToken}>
-                <div className="mb-4">
-                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Minutos a usar</label>
-                    <input type="number" value={minutesToUse} onChange={e => setMinutesToUse(e.target.value)} placeholder={`Máximo: ${Math.floor(userData.creditsMinutes)}`} required className="w-full px-3 py-3 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-200" />
-                </div>
-                <button type="submit" disabled={isLoading} className="w-full flex justify-center items-center bg-green-500 text-white font-bold py-4 rounded-lg">{isLoading ? <Spinner /> : 'Generar Token'}</button>
-            </form>
-            {generatedToken && (
-                <div className="mt-8 p-4 bg-green-100 dark:bg-green-900/50 rounded-lg text-center">
-                    <p className="text-sm text-green-800 dark:text-green-300">Su nuevo token es:</p>
-                    <p className="text-2xl font-mono font-bold text-green-900 dark:text-green-200 break-all">{generatedToken}</p>
-                </div>
-            )}
-        </div>
-        <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-xl">
-            <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-200 mb-4">Mis Tokens Activos</h3>
-            {userTokens.length > 0 ? (
-                <ul className="space-y-3 max-h-96 overflow-y-auto">
-                    {userTokens.map(token => (
-                        <li key={token.id} className="p-3 bg-slate-50 dark:bg-slate-700 rounded-lg">
-                            <p className="font-mono font-bold text-slate-700 dark:text-slate-200">{token.tokenString}</p>
-                            <p className="text-sm text-slate-500 dark:text-slate-400">{token.durationMinutes} minutos</p>
-                        </li>
-                    ))}
-                </ul>
-            ) : <p className="text-slate-500 dark:text-slate-400">No tiene tokens generados.</p>}
-        </div>
-    </div>
-);
-
-
-
-// --- NEW: Notifications Component ---
-const NotificationsPanel = ({ user }) => {
-    const [notifications, setNotifications] = useState([]);
-    const [isOpen, setIsOpen] = useState(false);
-
-    useEffect(() => {
-        if (!user) return;
-        const q = query(collection(db, "notifications"), where("toUserId", "==", user.uid), orderBy("createdAt", "desc"));
-        const unsub = onSnapshot(q, snapshot => {
-            setNotifications(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        });
-        return () => unsub();
-    }, [user.uid]);
-
-    const handleOpen = async () => {
-        setIsOpen(!isOpen);
-        if (!isOpen) { // Mark as read when opening for the first time
-            const unreadNotifs = notifications.filter(n => !n.isRead);
-            if (unreadNotifs.length > 0) {
-                const batch = writeBatch(db);
-                unreadNotifs.forEach(notif => {
-                    batch.update(doc(db, "notifications", notif.id), { isRead: true });
-                });
-                await batch.commit();
-            }
-        }
-    };
-
-    const unreadCount = notifications.filter(n => !n.isRead).length;
-
-    return (
-        <div className="relative">
-            <button onClick={handleOpen} className="relative p-2 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
-                <Icon path="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
-                {unreadCount > 0 && (
-                    <span className="absolute top-0 right-0 block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-slate-800"></span>
-                )}
-            </button>
-            {isOpen && (
-                <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-slate-800 rounded-lg shadow-xl border dark:border-slate-700 z-10">
-                    <div className="p-3 font-bold text-lg border-b dark:border-slate-700">Notificaciones</div>
-                    <ul className="max-h-96 overflow-y-auto">
-                        {notifications.length > 0 ? notifications.map(n => (
-                            <li key={n.id} className={`p-3 border-b dark:border-slate-700 ${!n.isRead ? 'bg-blue-50 dark:bg-blue-900/50' : ''}`}>
-                                <p className="text-sm">{n.message}</p>
-                                <p className="text-xs text-slate-400 mt-1">{n.createdAt.toDate().toLocaleString('es-CR')}</p>
-                            </li>
-                        )) : <li className="p-4 text-sm text-slate-500">No hay notificaciones.</li>}
-                    </ul>
-                </div>
-            )}
-        </div>
-    );
-};
-
-const UserPage = ({ user }) => {
-    const [activeTab, setActiveTab] = useState('buy');
-    const [submission, setSubmission] = useState(null);
-    const [isLoading, setIsLoading] = useState(false);
-    const [userData, setUserData] = useState(null); // Changed initial state
-    const [timePackages, setTimePackages] = useState([]);
-    const [userTokens, setUserTokens] = useState([]);
-    const [minutesToUse, setMinutesToUse] = useState('');
-    const [generatedToken, setGeneratedToken] = useState(null);
-    const [username, setUsername] = useState('');
-    const [usernameError, setUsernameError] = useState('');
+    const [packages, setPackages] = useState([]);
+    const [selectedPackage, setSelectedPackage] = useState('');
+    const [phoneNumber, setPhoneNumber] = useState('');
+    const [receiptFile, setReceiptFile] = useState(null);
+    const [isUploading, setIsUploading] = useState(false);
     const [showPaymentSuccess, setShowPaymentSuccess] = useState(false);
     const [paymentData, setPaymentData] = useState(null);
+    const [activeTab, setActiveTab] = useState('buy');
+    const [userCredits, setUserCredits] = useState({ hours: 1, minutes: 0 });
+    const [currentTime, setCurrentTime] = useState(new Date());
 
+    // Update current time every second
     useEffect(() => {
-        const unsub = onSnapshot(collection(db, 'timePackages'), snapshot => {
-            setTimePackages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        });
-        return () => unsub();
+        const timer = setInterval(() => {
+            setCurrentTime(new Date());
+        }, 1000);
+        return () => clearInterval(timer);
     }, []);
-    
+
+    // Reset payment success state when changing tabs
     useEffect(() => {
-        const userRef = doc(db, "users", user.uid);
-        const unsub = onSnapshot(userRef, (doc) => {
-            setUserData(doc.data() || { needsUsername: !doc.exists(), creditsMinutes: 0 });
-        });
-        return () => unsub();
-    }, [user.uid]);
+        if (activeTab !== 'buy') {
+            setShowPaymentSuccess(false);
+            setPaymentData(null);
+        }
+    }, [activeTab]);
 
     useEffect(() => {
-        const q = query(collection(db, "tokens"), where("userId", "==", user.uid), orderBy("createdAt", "desc"));
-        const unsub = onSnapshot(q, snapshot => {
-            setUserTokens(snapshot.docs.map(doc => ({id: doc.id, ...doc.data()})));
-        });
-        return () => unsub();
-    }, [user.uid]);
-
-    const formatCredits = (minutes) => {
-        if (!minutes || minutes < 0) return "0h 0m";
-        const hours = Math.floor(minutes / 60);
-        const remainingMinutes = Math.round(minutes % 60);
-        return `${hours}h ${remainingMinutes}m`;
-    };
-    
-    const handleUsernameSubmit = async (e) => {
-        e.preventDefault();
-        setIsLoading(true);
-        setUsernameError('');
-        if (username.length < 3) {
-            setUsernameError("El nombre de usuario debe tener al menos 3 caracteres.");
-            setIsLoading(false);
+        if (!user) {
+            console.log('UserPage: No user, skipping package fetch');
             return;
         }
 
-        try {
-            const usersRef = collection(db, 'users');
-            const q = query(usersRef, where("username", "==", username));
-            const querySnapshot = await getDocs(q);
-            if (!querySnapshot.empty) {
-                setUsernameError("Este nombre de usuario ya está en uso.");
-                setIsLoading(false);
-                return;
+        console.log('UserPage: Setting up real-time listener for packages...');
+        console.log('UserPage: Current user:', user.email);
+        
+        const packagesRef = collection(db, 'timePackages');
+        const unsubscribe = onSnapshot(packagesRef, (snapshot) => {
+            try {
+                console.log('UserPage: Real-time packages update received');
+                console.log('UserPage: Snapshot size:', snapshot.size);
+                console.log('UserPage: Snapshot empty:', snapshot.empty);
+                
+                const packagesList = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                console.log('UserPage: Updated packages:', packagesList);
+                setPackages(packagesList);
+            } catch (error) {
+                console.error('Error processing packages snapshot:', error);
+                setPackages([]);
             }
+        }, (error) => {
+            console.error('Error in packages listener:', error);
+            setPackages([]);
+        });
 
-            await setDoc(doc(db, 'users', user.uid), {
-                email: user.email,
-                username: username,
-                creditsMinutes: 0,
-                createdAt: serverTimestamp()
-            });
-        } catch (err) {
-            setUsernameError("No se pudo guardar el nombre de usuario.");
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // ... (handleGenerateToken and handleSubmitPurchase remain the same)
-    const handleGenerateToken = async (e) => {
-        e.preventDefault();
-        const minutes = parseInt(minutesToUse, 10);
-        if (isNaN(minutes) || minutes <= 0) {
-            alert("Por favor, ingrese un número válido de minutos.");
-            return;
-        }
-        if (minutes > userData.creditsMinutes) {
-            alert("No tiene suficientes créditos para generar este token.");
-            return;
-        }
-
-        setIsLoading(true);
-        try {
-            const tokenString = `WIFI-${Date.now().toString().slice(-4)}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-            await addDoc(collection(db, 'tokens'), { userId: user.uid, tokenString, durationMinutes: minutes, status: 'active', createdAt: serverTimestamp() });
-            await updateDoc(doc(db, 'users', user.uid), { creditsMinutes: increment(-minutes) });
-            setGeneratedToken(tokenString);
-            setMinutesToUse('');
-        } catch (error) {
-            console.error("Error generating token:", error);
-            alert("Ocurrió un error al generar el token.");
-        } finally {
-            setIsLoading(false);
-        }
-    };
+        return () => {
+            console.log('UserPage: Cleaning up packages listener');
+            unsubscribe();
+        };
+    }, [user]);
 
     const handleSubmitPurchase = async (e) => {
         e.preventDefault();
-        setIsLoading(true);
-        const formData = new FormData(e.target);
-        const sinpeId = formData.get('sinpe-id'), file = formData.get('receipt-file'), selectedPackageId = formData.get('package');
-        const selectedPackage = timePackages.find(p => p.id === selectedPackageId);
-        
+        if (!selectedPackage || !phoneNumber || !receiptFile) return;
+
+        const selectedPkg = packages.find(pkg => pkg.id === selectedPackage);
+        if (!selectedPkg) return;
+
+        setIsUploading(true);
+
         try {
-            const filePath = `receipts/${user.uid}/${Date.now()}-${file.name}`;
-            const storageRef = ref(storage, filePath);
-            const uploadResult = await uploadBytes(storageRef, file);
-            const downloadURL = await getDownloadURL(uploadResult.ref);
-            await setDoc(doc(db, 'users', user.uid), { email: user.email, createdAt: serverTimestamp() }, { merge: true });
-            const docRef = await addDoc(collection(db, "payments"), { 
-                userId: user.uid, sinpeId, receiptImageUrl: downloadURL, status: "pending", 
-                createdAt: serverTimestamp(), packageName: selectedPackage.name, price: selectedPackage.price,
-                durationMinutes: selectedPackage.durationMinutes
-            });
-            setSubmission({ id: docRef.id, status: 'pending' });
+            // Upload receipt to Firebase Storage
+            const receiptRef = ref(storage, `receipts/${user.uid}/${Date.now()}_${receiptFile.name}`);
+            const uploadResult = await uploadBytes(receiptRef, receiptFile);
+            const receiptUrl = await getDownloadURL(uploadResult.ref);
+
+            console.log('Receipt uploaded successfully:', receiptUrl);
+
+            // Create payment data with receipt information
+            const paymentData = {
+                userId: user.uid,
+                userEmail: user.email,
+                userName: user.displayName || user.email,
+                packageId: selectedPackage,
+                packageName: selectedPkg.name,
+                packageDuration: selectedPkg.duration,
+                packagePrice: selectedPkg.price,
+                phoneNumber: phoneNumber,
+                receiptUrl: receiptUrl,
+                receiptFileName: receiptFile.name,
+                status: 'pending',
+                timestamp: serverTimestamp(),
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp()
+            };
+
+            console.log('Creating payment with data:', paymentData);
+
+            const docRef = await addDoc(collection(db, 'payments'), paymentData);
             
-            // Show payment success animation
             setPaymentData({
-                amount: selectedPackage.price,
-                packageName: selectedPackage.name,
-                durationMinutes: selectedPackage.durationMinutes,
-                sinpeId: sinpeId,
-                timestamp: new Date(),
-                status: 'pending'
+                ...paymentData,
+                id: docRef.id,
+                timestamp: new Date()
             });
             setShowPaymentSuccess(true);
-        } catch (error) { 
-            console.error("Error submitting payment:", error);
-            alert("Ocurrió un error."); 
-        } finally { 
-            setIsLoading(false); 
+            
+            // Reset form
+            setSelectedPackage('');
+            setPhoneNumber('');
+            setReceiptFile(null);
+        } catch (error) {
+            console.error('Error submitting payment:', error);
+            alert('Error al enviar el pago. Por favor, intenta de nuevo.');
+        } finally {
+            setIsUploading(false);
         }
     };
-    
-    const handleLogout = () => signOut(auth);
 
-    if (!userData || userData.needsUsername) {
+    const handleLogout = async () => {
+        try {
+            await signOut(auth);
+        } catch (error) {
+            console.error('Error signing out:', error);
+        }
+    };
+
+    if (loading) {
         return (
-            <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-                <div className="max-w-md w-full bg-white p-8 rounded-2xl shadow-xl">
-                    <h2 className="text-3xl font-bold text-center text-slate-800 mb-2">¡Casi listo!</h2>
-                                            <p className="text-center text-slate-500 dark:text-slate-400 mb-8">Elige tu nombre de usuario para el mural comunitario.</p>
-                    <form onSubmit={handleUsernameSubmit}>
-                        <div className="mb-4">
-                            <label className="block text-sm font-bold text-slate-700 mb-1">Nombre de Usuario</label>
-                            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} required className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg"/>
-                        </div>
-                        {usernameError && <p className="text-red-500 text-sm text-center mb-4">{usernameError}</p>}
-                        <button type="submit" disabled={isLoading} className="w-full flex justify-center items-center bg-blue-600 text-white font-bold py-3 px-4 rounded-lg">
-                            {isLoading ? <Spinner /> : 'Guardar y Continuar'}
-                        </button>
-                    </form>
+            <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
+                    <p className="mt-4 text-lg text-gray-600 dark:text-gray-300">Cargando...</p>
                 </div>
             </div>
         );
     }
 
+    if (!user) {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
+                <div className="text-center">
+                    <p className="text-lg text-gray-600 dark:text-gray-300">No has iniciado sesión</p>
+                </div>
+            </div>
+        );
+    }
+
+    const renderTabContent = () => {
+        switch (activeTab) {
+            case 'buy':
+                return (
+                    <div className="space-y-6">
+                        {/* Virtual Credit Card */}
+                        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
+                            <div className="text-center mb-6">
+                                <FiClock className="w-6 h-6 text-green-600 mx-auto mb-2" />
+                                <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Tu Tarjeta Virtual WiFi</h2>
+                                <p className="text-gray-600 dark:text-gray-400">Descarga tu tarjeta virtual para acceso rápido</p>
+                            </div>
+                            <VirtualCreditCard 
+                                userCredits={userCredits} 
+                                user={user} 
+                                theme={theme} 
+                            />
+                        </div>
+
+                        {/* Credit Status Card */}
+                        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
+                            <div className="flex items-center gap-3 mb-4">
+                                <FiClock className="w-6 h-6 text-green-600" />
+                                <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Estado de Créditos</h2>
+                            </div>
+                            <div className="text-center">
+                                <div className="text-3xl font-bold text-green-600 dark:text-green-400 mb-2">
+                                    {userCredits.hours}h {userCredits.minutes}m
+                                </div>
+                                <div className="text-sm text-gray-600 dark:text-gray-400 mb-3">Tiempo Restante</div>
+                                <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-3 mb-2">
+                                    <div 
+                                        className="bg-green-500 h-3 rounded-full transition-all duration-300"
+                                        style={{ width: '75%' }}
+                                    ></div>
+                                </div>
+                                <div className="text-sm text-gray-500 dark:text-gray-400">
+                                    Aproximadamente 75% de tu tiempo disponible
+                                </div>
+                            </div>
+                            
+                            {/* Payment Instructions */}
+                            <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
+                                <h3 className="font-medium text-blue-800 dark:text-blue-300 mb-2">📋 Instrucciones de Pago:</h3>
+                                <ol className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
+                                    <li>1. Realiza el pago SINPE al número: <strong>88888888</strong></li>
+                                    <li>2. Sube el comprobante de pago en el formulario</li>
+                                    <li>3. Espera la aprobación del administrador</li>
+                                    <li>4. Recibirás notificación cuando se apruebe</li>
+                                </ol>
+                                
+                                <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg">
+                                    <h4 className="font-medium text-green-800 dark:text-green-300 mb-2">✅ Comprobante Subido</h4>
+                                    <p className="text-sm text-green-700 dark:text-green-300">
+                                        Tu comprobante de pago ha sido subido exitosamente. 
+                                        El administrador lo revisará y aprobará tu pago en las próximas 24-48 horas.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Package Selection Card */}
+                        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
+                            <div className="text-center mb-6">
+                                <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">Seleccionar Paquete</h2>
+                                <p className="text-gray-600 dark:text-gray-400">Elige el paquete de tiempo que mejor se adapte a tus necesidades</p>
+                            </div>
+                            
+                            {/* Debug Info - Remove this after testing */}
+                            {process.env.NODE_ENV === 'development' && (
+                                <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg text-sm">
+                                    <p className="font-medium text-yellow-800 dark:text-yellow-300 mb-2">Debug Info:</p>
+                                    <p className="text-yellow-700 dark:text-yellow-300">Total packages fetched: {packages.length}</p>
+                                    <p className="text-yellow-700 dark:text-yellow-300">Active packages: {packages.filter(pkg => pkg.isActive !== false).length}</p>
+                                    {packages.length > 0 && (
+                                        <details className="mt-2">
+                                            <summary className="cursor-pointer text-yellow-700 dark:text-yellow-300">Raw packages data:</summary>
+                                            <pre className="mt-2 text-xs bg-yellow-100 dark:bg-yellow-900 p-2 rounded overflow-auto text-yellow-800 dark:text-yellow-200">
+                                                {JSON.stringify(packages, null, 2)}
+                                            </pre>
+                                        </details>
+                                    )}
+                                </div>
+                            )}
+                            
+                            {packages.length === 0 ? (
+                                <div className="text-center py-8">
+                                    <div className="text-gray-400 dark:text-gray-500 mb-4">
+                                        <FiPackage className="w-16 h-16 mx-auto" />
+                                    </div>
+                                    <p className="text-gray-600 dark:text-gray-400">No hay paquetes disponibles en este momento.</p>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">Contacta al administrador para más información.</p>
+                                    
+                                    {/* Admin Help */}
+                                    {user?.email === 'lejzer36@gmail.com' && (
+                                        <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg text-sm">
+                                            <p className="font-medium text-blue-800 dark:text-blue-300 mb-2">💡 Para Administradores:</p>
+                                            <p className="text-blue-700 dark:text-blue-300">Ve a la pestaña "Configuración" en el panel de administración para crear paquetes de tiempo.</p>
+                                            <p className="text-blue-700 dark:text-blue-300 mt-1">Los paquetes aparecerán aquí automáticamente una vez creados.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {packages
+                                        .filter(pkg => pkg.isActive !== false) // Only show active packages
+                                        .map((pkg) => {
+                                            // Convert duration to number for calculations
+                                            const durationNum = parseFloat(pkg.duration) || 1;
+                                            const priceNum = parseFloat(pkg.price) || 0;
+                                            
+                                            return (
+                                                <motion.div
+                                                    key={pkg.id}
+                                                    className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
+                                                        selectedPackage === pkg.id
+                                                            ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                                                            : 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-500 hover:bg-gray-100 dark:hover:bg-gray-600'
+                                                    }`}
+                                                    onClick={() => setSelectedPackage(pkg.id)}
+                                                    whileHover={{ scale: 1.02 }}
+                                                    whileTap={{ scale: 0.98 }}
+                                                >
+                                                    {pkg.name === '3 horas' && (
+                                                        <div className="absolute -top-2 -right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full font-medium">
+                                                            Más Popular
+                                                        </div>
+                                                    )}
+                                                    <div className="text-center">
+                                                        <div className="text-lg font-semibold text-gray-800 dark:text-white mb-1">{pkg.name}</div>
+                                                        <div className="text-2xl font-bold text-green-600 dark:text-green-400 mb-1">₡{pkg.price}</div>
+                                                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                                                            ₡{durationNum > 0 ? Math.round(priceNum / durationNum) : 0} por hora
+                                                        </div>
+                                                        {pkg.description && (
+                                                            <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">{pkg.description}</div>
+                                                        )}
+                                                    </div>
+                                                </motion.div>
+                                            );
+                                        })}
+                                </div>
+                            )}
+
+                            {/* Purchase Form */}
+                            <form onSubmit={handleSubmitPurchase} className="mt-6 space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                        Número de Teléfono SINPE
+                                    </label>
+                                    <input
+                                        type="tel"
+                                        value={phoneNumber}
+                                        onChange={(e) => setPhoneNumber(e.target.value)}
+                                        placeholder="Ej: 88888888"
+                                        className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                                        required
+                                    />
+                                </div>
+
+                                {/* Receipt Upload */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                        Comprobante de Pago (Obligatorio)
+                                    </label>
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-center w-full">
+                                            <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-lg cursor-pointer bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600">
+                                                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                                    {receiptFile ? (
+                                                        <div className="text-center">
+                                                            <FiFileText className="w-8 h-8 text-green-600 mb-2" />
+                                                            <p className="text-sm text-gray-600 dark:text-gray-400">{receiptFile.name}</p>
+                                                            <p className="text-xs text-gray-500 dark:text-gray-400">Archivo seleccionado</p>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-center">
+                                                            <FiFileText className="w-8 h-8 text-gray-400 mb-2" />
+                                                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                                                                <span className="font-semibold">Click para subir</span> o arrastra y suelta
+                                                            </p>
+                                                            <p className="text-xs text-gray-500 dark:text-gray-400">PNG, JPG, PDF hasta 10MB</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <input
+                                                    type="file"
+                                                    className="hidden"
+                                                    accept=".png,.jpg,.jpeg,.pdf"
+                                                    onChange={(e) => {
+                                                        const file = e.target.files[0];
+                                                        if (file && file.size <= 10 * 1024 * 1024) { // 10MB limit
+                                                            setReceiptFile(file);
+                                                        } else if (file) {
+                                                            alert('El archivo es demasiado grande. Máximo 10MB.');
+                                                        }
+                                                    }}
+                                                    required
+                                                />
+                                            </label>
+                                        </div>
+                                        {receiptFile && (
+                                            <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg">
+                                                <div className="flex items-center gap-2">
+                                                    <FiFileText className="w-5 h-5 text-green-600" />
+                                                    <span className="text-sm text-green-800 dark:text-green-300">{receiptFile.name}</span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setReceiptFile(null)}
+                                                    className="text-red-600 hover:text-red-800 dark:hover:text-red-400 text-sm"
+                                                >
+                                                    Eliminar
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                
+                                <motion.button
+                                    type="submit"
+                                    disabled={!selectedPackage || !phoneNumber || !receiptFile || isUploading}
+                                    className="w-full bg-green-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    whileHover={{ scale: 1.02 }}
+                                    whileTap={{ scale: 0.98 }}
+                                >
+                                    {isUploading ? (
+                                        <div className="flex items-center justify-center gap-2">
+                                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                            Subiendo comprobante...
+                                        </div>
+                                    ) : (
+                                        'Comprar Paquete'
+                                    )}
+                                </motion.button>
+                            </form>
+                        </div>
+                    </div>
+                );
+            case 'use':
+                return (
+                    <div className="space-y-6">
+                        {/* Virtual Credit Card */}
+                        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
+                            <div className="text-center mb-6">
+                                <FiWifi className="w-16 h-16 text-green-600 mx-auto mb-4" />
+                                <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">Tu Tarjeta Virtual WiFi</h2>
+                                <p className="text-gray-600 dark:text-gray-400">Descarga tu tarjeta virtual para acceso rápido a WiFi</p>
+                            </div>
+                            <VirtualCreditCard 
+                                userCredits={userCredits} 
+                                user={user} 
+                                theme={theme} 
+                            />
+                        </div>
+
+                        {/* WiFi Connection Info */}
+                        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
+                            <div className="text-center">
+                                <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-4">Conectar a WiFi</h3>
+                                <p className="text-gray-600 dark:text-gray-400 mb-6">Conecta tu dispositivo a la red WiFi-Hub para comenzar a usar tus créditos</p>
+                                <div className="bg-green-100 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg p-4">
+                                    <div className="text-green-800 dark:text-green-300 font-medium">Red: WiFi-Hub</div>
+                                    <div className="text-green-700 dark:text-green-400 text-sm">Contraseña: Proporcionada por administración</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            case 'history':
+                return (
+                    <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
+                        <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-6">Historial de Transacciones</h2>
+                        <div className="text-center text-gray-500 dark:text-gray-400 py-8">
+                            <FiFileText className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
+                            <p>No hay transacciones para mostrar</p>
+                        </div>
+                    </div>
+                );
+                            case 'support':
+                    console.log('Rendering Support component with user:', user);
+                    return <Support user={user} />;
+            case 'bulletin':
+                return <BulletinBoard />;
+            case 'help':
+                return <Help />;
+            default:
+                return null;
+        }
+    };
+
     return (
-        <div className="bg-slate-100 dark:bg-slate-900 min-h-screen p-4">
-            <header className="max-w-7xl mx-auto flex justify-between items-center mb-10">
-                <div>
-                    <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Portal de Usuario</h1>
-                    <p className="text-slate-500 dark:text-slate-400">{userData.username || user.email}</p>
-                </div>
-                <div className="flex items-center space-x-6">
-                    <div className="text-right">
-                        <p className="text-sm text-slate-500 dark:text-slate-400">Crédito Disponible</p>
-                        <p className="font-bold text-blue-600 dark:text-blue-400 text-lg">{formatCredits(userData.creditsMinutes)}</p>
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+            {/* Top Header */}
+            <div className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="flex items-center justify-between h-16">
+                        {/* Left - Logo and Status */}
+                        <div className="flex items-center gap-6">
+                            <div className="flex items-center gap-2">
+                                <FiWifi className="w-6 h-6 text-green-600" />
+                                <span className="text-xl font-bold text-gray-800 dark:text-white">WiFi Costa Rica</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                <span>Conectado</span>
+                            </div>
+                        </div>
+
+                        {/* Right - Credits, Time, and Logout */}
+                        <div className="flex items-center gap-6">
+                            <button
+                                onClick={toggleTheme}
+                                className="p-2 text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                                title={theme === 'light' ? 'Cambiar a modo oscuro' : 'Cambiar a modo claro'}
+                            >
+                                {theme === 'light' ? '🌙' : '☀️'}
+                            </button>
+                            <div className="text-right">
+                                <div className="text-sm text-gray-600 dark:text-gray-400">Crédito Disponible</div>
+                                <div className="text-lg font-bold text-green-600 dark:text-green-400">{userCredits.hours}h {userCredits.minutes}m</div>
+                            </div>
+                            <div className="text-right">
+                                <div className="text-sm text-gray-600 dark:text-gray-400">Hora Actual</div>
+                                <div className="text-sm font-medium text-gray-800 dark:text-white">
+                                    {currentTime.toLocaleTimeString('es-CR', { 
+                                        hour: '2-digit', 
+                                        minute: '2-digit', 
+                                        second: '2-digit',
+                                        hour12: true 
+                                    })}
+                                </div>
+                            </div>
+                            <motion.button
+                                onClick={handleLogout}
+                                className="flex items-center gap-2 px-4 py-2 text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                            >
+                                <FiLogOut className="w-4 h-4" />
+                                Cerrar Sesión
+                            </motion.button>
+                        </div>
                     </div>
-                    <ThemeToggleButton />
-                    <button onClick={handleLogout} className="font-semibold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400">Cerrar Sesión</button>
                 </div>
-            </header>
-            <nav className="flex justify-center mb-8">
-                <div className="flex items-center space-x-2 p-1.5 bg-slate-200 dark:bg-slate-800 rounded-full">
-                    <button onClick={() => setActiveTab('buy')} className={`px-4 py-2 text-sm font-semibold rounded-full ${activeTab === 'buy' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-slate-200 shadow' : 'text-slate-600 dark:text-slate-400'}`}>Comprar Créditos</button>
-                    <button onClick={() => setActiveTab('tokens')} className={`px-4 py-2 text-sm font-semibold rounded-full ${activeTab === 'tokens' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-slate-200 shadow' : 'text-slate-600 dark:text-slate-400'}`}>Usar Créditos / Tokens</button>
-                    <button onClick={() => setActiveTab('bulletin')} className={`px-4 py-2 text-sm font-semibold rounded-full ${activeTab === 'bulletin' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-slate-200 shadow' : 'text-slate-600 dark:text-slate-400'}`}>Mural Comunitario</button>
-                    <button onClick={() => setActiveTab('support')} className={`px-4 py-2 text-sm font-semibold rounded-full ${activeTab === 'support' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-slate-200 shadow' : 'text-slate-600 dark:text-slate-400'}`}>Soporte</button>
-                    <button onClick={() => setActiveTab('referrals')} className={`px-4 py-2 text-sm font-semibold rounded-full ${activeTab === 'referrals' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-slate-200 shadow' : 'text-slate-600 dark:text-slate-400'}`}>Referencias</button>
+            </div>
+
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                <div className="flex gap-6">
+                    {/* Left Sidebar */}
+                    <div className="w-64 flex-shrink-0">
+                        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
+                            {/* User Profile */}
+                            <div className="text-center mb-6 pb-6 border-b border-gray-200 dark:border-gray-600">
+                                <div className="w-16 h-16 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mx-auto mb-3">
+                                    <FiUser className="w-8 h-8 text-green-600" />
+                                </div>
+                                <div className="font-medium text-gray-800 dark:text-white">Usuario</div>
+                                <div className="text-sm text-gray-600 dark:text-gray-400">{user.displayName || user.email}</div>
+                            </div>
+
+                            {/* Navigation */}
+                            <nav className="space-y-2">
+                                {[
+                                    { id: 'buy', label: 'Comprar Créditos', icon: FiFileText },
+                                    { id: 'use', label: 'Usar Créditos', icon: FiClock },
+                                    { id: 'history', label: 'Historial', icon: FiFileText },
+                                    { id: 'support', label: 'Soporte', icon: FiHelpCircle },
+                                    { id: 'bulletin', label: 'Mural Comunitario', icon: FiUsers },
+                                    { id: 'help', label: 'Ayuda', icon: FiHelpCircle }
+                                ].map((item) => (
+                                    <motion.button
+                                        key={item.id}
+                                        onClick={() => setActiveTab(item.id)}
+                                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                                            activeTab === item.id
+                                                ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-700'
+                                                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-800 dark:hover:text-white'
+                                        }`}
+                                        whileHover={{ scale: 1.02 }}
+                                        whileTap={{ scale: 0.98 }}
+                                    >
+                                        <item.icon className="w-5 h-5" />
+                                        {item.label}
+                                    </motion.button>
+                                ))}
+                            </nav>
+                        </div>
+                    </div>
+
+                    {/* Main Content */}
+                    <div className="flex-1">
+                        {/* Tab Navigation */}
+                        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 mb-6">
+                            <div className="flex space-x-1 bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
+                                {[
+                                    { id: 'buy', label: 'Comprar Créditos' },
+                                    { id: 'use', label: 'Usar Créditos' },
+                                    { id: 'history', label: 'Historial' },
+                                    { id: 'support', label: 'Soporte' }
+                                ].map((tab) => (
+                                    <button
+                                        key={tab.id}
+                                        onClick={() => setActiveTab(tab.id)}
+                                        className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                                            activeTab === tab.id
+                                                ? 'bg-white dark:bg-gray-600 text-green-600 dark:text-green-400 shadow-sm'
+                                                : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white'
+                                        }`}
+                                    >
+                                        {tab.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Tab Content */}
+                        {renderTabContent()}
+                    </div>
                 </div>
-            </nav>
-            <main className="flex items-start justify-center">
-                {activeTab === 'buy' && <BuyCreditsView 
-                    submission={submission}
-                    setSubmission={setSubmission}
-                    timePackages={timePackages}
-                    handleSubmitPurchase={handleSubmitPurchase}
-                    isLoading={isLoading}
-                />}
-                {activeTab === 'tokens' && <GenerateTokenView 
-                    handleGenerateToken={handleGenerateToken}
-                    minutesToUse={minutesToUse}
-                    setMinutesToUse={setMinutesToUse}
-                    userData={userData}
-                    formatCredits={formatCredits}
-                    isLoading={isLoading}
-                    generatedToken={generatedToken}
-                    userTokens={userTokens}
-                />}
-                {activeTab === 'bulletin' && <BulletinBoard user={user} />}
-                {activeTab === 'support' && <Support user={user} />}
-                {activeTab === 'referrals' && <ReferralProgram user={user} />}
-            </main>
-            
-            {/* Payment Success Animation Overlay */}
+            </div>
+
+            {/* Payment Success Animation */}
             {showPaymentSuccess && paymentData && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="relative">
-                        <button 
-                            onClick={() => setShowPaymentSuccess(false)}
-                            className="absolute top-4 right-4 text-white hover:text-gray-300 text-2xl z-10"
-                        >
-                            ×
-                        </button>
-                        <PaymentSuccessAnimation 
-                            paymentData={paymentData}
-                            onClose={() => setShowPaymentSuccess(false)}
-                        />
-                    </div>
-                </div>
+                <PaymentSuccessAnimation
+                    paymentData={paymentData}
+                    onClose={() => setShowPaymentSuccess(false)}
+                />
             )}
+
+            {/* AI Chatbot */}
+            <AIChatbot />
         </div>
     );
 };
